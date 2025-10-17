@@ -96,10 +96,7 @@ namespace CTMOnCSharp
         public static extern CTMGetCashCountsResult GetNonDispensableCashCounts();
 
         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_get_config", CallingConvention = CallingConvention.Cdecl)]
-        public static extern CTMGetConfigResult GetConfig([MarshalAs(UnmanagedType.LPStr)] string key);
-
-
-
+        public static extern CTMGetConfigResult GetConfig();  
 
 
 
