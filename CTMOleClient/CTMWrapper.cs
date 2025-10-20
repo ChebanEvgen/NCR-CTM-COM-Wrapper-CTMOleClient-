@@ -2,23 +2,12 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.IO;
+using System.Reflection;
+using System.Threading;
 using CTMOnCSharp;
 
 namespace CTMOleClient
 {
-    // Event interface (для событий в 1C)
-    [ComVisible(true)]
-    [Guid("A1B2C3D4-E5F6-7890-ABCD-EF1234567890")]
-    [InterfaceType(ComInterfaceType.InterfaceIsIDispatch)]
-    public interface ICTMWrapperEvents
-    {
-        [DispId(1)] void OnDeviceError([In] string errorInfo);
-        [DispId(2)] void OnCashAccept([In] string acceptInfo);
-        [DispId(3)] void OnCashAcceptComplete();
-        [DispId(4)] void OnDeviceStatus([In] string statusInfo);
-    }
-
-    // Интерфейс методов (для 1C)
     [ComVisible(true)]
     [Guid("D36A29C9-0B48-4F39-BB51-8F3B738AA111")]
     [InterfaceType(ComInterfaceType.InterfaceIsDual)]
@@ -38,23 +27,17 @@ namespace CTMOleClient
         string GetNonDispensableCashCounts();
         void AdviseEvents();
         void UnadviseEvents();
+        void SetConnection(object pConnection);
+
     }
 
-    // Основной класс (наследует StandardAddIn, реализует ICTMWrapper)
     [ComVisible(true)]
     [Guid("5C6E18AF-3B0F-4639-90B0-B04D1B9FF999")]
     [ProgId("CTMOleClient.CTMWrapper")]
     [ClassInterface(ClassInterfaceType.None)]
-    [ComSourceInterfaces(typeof(ICTMWrapperEvents))]
     public class CTMWrapper : StandardAddIn, ICTMWrapper
     {
-        public CTMWrapper() : base() { }  // Конструктор
-
-        // События
-        public event Action<string> OnDeviceErrorEvent;
-        public event Action<string> OnCashAcceptEvent;
-        public event Action OnCashAcceptCompleteEvent;
-        public event Action<string> OnDeviceStatusEvent;
+        public CTMWrapper() : base() { }
 
         private CtmCClient.OnDeviceErrorCallBack _deviceErrorCallback;
         private CtmCClient.OnCashAcceptCallBack _cashAcceptCallback;
@@ -64,8 +47,27 @@ namespace CTMOleClient
         private string _lastError = string.Empty;
         private string _currentTransactionId = string.Empty;
         private bool _eventsEnabled = false;
+        private SynchronizationContext _uiContext;
 
-        // Реализация методов ICTMWrapper
+        public override void Init(object pConnection)
+        {
+            SetConnection(pConnection);  
+                                         
+        }
+
+        public void SetConnection(object pConnection)
+        {
+            _oneCObject = pConnection;  // ЭтаФорма из 1С
+            _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
+            LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] SetConnection: UI Context captured for 1C 8.2 form ({_uiContext.GetType().Name}).");
+        }
+
+        public override void Done()
+        {
+            _uiContext = null;
+            base.Done();
+        }
+
         public string GetLastError() => _lastError;
 
         public string Initialize(string clientId, string overrideHost = null, string overridePort = null)
@@ -85,17 +87,17 @@ namespace CTMOleClient
                     AddCallbacks();
                     _lastError = "OK";
                     _currentTransactionId = string.Empty;
-                    LogToFile($"[{DateTime.Now}] Initialize: SUCCESS.");
+                    LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Initialize: SUCCESS on x86.");
                     return "OK";
                 }
                 _lastError = result.ToString();
-                LogToFile($"[{DateTime.Now}] Initialize: FAILED ({result}).");
+                LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Initialize: FAILED ({result}).");
                 return _lastError;
             }
             catch (Exception ex)
             {
                 _lastError = ex.Message;
-                LogToFile($"[{DateTime.Now}] Initialize: EXCEPTION {ex.Message}.");
+                LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Initialize: EXCEPTION {ex.Message}.");
                 return _lastError;
             }
         }
@@ -106,7 +108,7 @@ namespace CTMOleClient
             CtmCClient.Uninitialize();
             _currentTransactionId = string.Empty;
             _lastError = "Uninitialized";
-            LogToFile($"[{DateTime.Now}] Uninitialize: Called.");
+            LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Uninitialize: Called.");
         }
 
         public string Reinitialize(string clientId, string overrideHost = null, string overridePort = null)
@@ -120,11 +122,7 @@ namespace CTMOleClient
             try
             {
                 var configResult = CtmCClient.GetConfig();
-                if (configResult.config.count == 0)
-                {
-                    _lastError = "No config available";
-                    return string.Empty;
-                }
+                if (configResult.config.count == 0) return string.Empty;
 
                 string value = string.Empty;
                 IntPtr ptr = configResult.config.intPtr;
@@ -139,22 +137,19 @@ namespace CTMOleClient
                         break;
                     }
                 }
-                _lastError = "OK";
                 return value;
             }
-            catch (Exception ex)
+            catch
             {
-                _lastError = ex.Message;
                 return string.Empty;
             }
         }
 
         public bool BeginCustomerTransaction(string txnId)
         {
-            var resultStruct = CtmCClient.BeginCustomerTransaction(txnId);
-            var resultCode = resultStruct.error;
-            _lastError = resultCode.ToString();
-            if (resultCode == CTMBeginTransactionError.CTM_BEGIN_TRX_SUCCESS)
+            var result = CtmCClient.BeginCustomerTransaction(txnId);
+            _lastError = result.error.ToString();
+            if (result.error == CTMBeginTransactionError.CTM_BEGIN_TRX_SUCCESS)
             {
                 _currentTransactionId = txnId;
                 return true;
@@ -164,7 +159,7 @@ namespace CTMOleClient
 
         public bool EndCustomerTransaction(string txnId)
         {
-            var result = CtmCClient.EndTransaction(txnId);
+            var result = CtmCClient.EndCustomerTransaction(txnId);
             _lastError = result.ToString();
             if (result == CTMEndTransactionResult.CTM_END_TRX_SUCCESS)
             {
@@ -248,16 +243,15 @@ namespace CTMOleClient
         public void AdviseEvents()
         {
             _eventsEnabled = true;
-            LogToFile($"[{DateTime.Now}] AdviseEvents: ENABLED.");
+            LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] AdviseEvents: ENABLED for 1C x86.");
         }
 
         public void UnadviseEvents()
         {
             _eventsEnabled = false;
-            LogToFile($"[{DateTime.Now}] UnadviseEvents: DISABLED.");
+            LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] UnadviseEvents: DISABLED.");
         }
 
-        // Callbacks
         private void AddCallbacks()
         {
             _deviceErrorCallback = HandleDeviceError;
@@ -275,27 +269,68 @@ namespace CTMOleClient
         {
             string errorInfo = $"Ошибка: Model={deviceError.deviceInfo.deviceModel}, Code={deviceError.resultCode}";
             LogToFile($"DeviceError: {errorInfo}");
-            if (_eventsEnabled) OnDeviceErrorEvent?.Invoke(errorInfo);
+            if (_eventsEnabled && _uiContext != null)
+            {
+                _uiContext.Post(_ => InvokeOneCEvent("OnDeviceError", new object[] { errorInfo }), null);
+            }
         }
 
         private void HandleCashAccept(CTMEventInfo evtInfo, CTMAcceptEvent acceptEvent)
         {
             string info = $"Принято: {acceptEvent.cashUnit.denomination}, Сумма: {acceptEvent.amount}";
-            LogToFile($"CashAccept: {info}");
-            if (_eventsEnabled) OnCashAcceptEvent?.Invoke(info);
+            LogToFile($"CashAccept: {info} -> dispatching to unmanaged form.");
+            if (_eventsEnabled && _uiContext != null)
+            {
+                _uiContext.Post(_ => InvokeOneCEvent("OnCashAccept", new object[] { info }), null);
+            }
         }
 
         private void HandleCashAcceptComplete(CTMEventInfo evtInfo)
         {
             LogToFile("CashAcceptComplete");
-            if (_eventsEnabled) OnCashAcceptCompleteEvent?.Invoke();
+            if (_eventsEnabled && _uiContext != null)
+            {
+                _uiContext.Post(_ => InvokeOneCEvent("OnCashAcceptComplete", new object[] { }), null);
+            }
         }
 
         private void HandleDeviceStatus(CTMEventInfo evtInfo, CTMDeviceStatus deviceStatus)
         {
             string statusInfo = $"Статус: Model={deviceStatus.deviceInfo.deviceModel}, State={deviceStatus.status}";
             LogToFile($"DeviceStatus: {statusInfo}");
-            if (_eventsEnabled) OnDeviceStatusEvent?.Invoke(statusInfo);
+            if (_eventsEnabled && _uiContext != null)
+            {
+                _uiContext.Post(_ => InvokeOneCEvent("OnDeviceStatus", new object[] { statusInfo }), null);
+            }
+        }
+
+        private void InvokeOneCEvent(string eventName, object[] parameters)
+        {
+            if (_oneCObject == null) return;
+
+            try
+            {
+                Type type = _oneCObject.GetType();  // Рефлексия на "Форма"
+                type.InvokeMember(eventName, BindingFlags.InvokeMethod, null, _oneCObject, parameters);
+                LogToFile($"OneC Event {eventName} invoked OK on unmanaged form.");
+            }
+            catch (MissingMethodException ex)
+            {
+                LogToFile($"OneC missing {eventName} on form: {ex.Message}");  // Если процедура не Экспорт
+            }
+            catch (Exception ex)
+            {
+                LogToFile($"InvokeOneCEvent {eventName} on unmanaged: {ex.Message}");
+                if (_oneCObject != null)
+                {
+                    try
+                    {
+                        Type typeFallback = _oneCObject.GetType();
+                        typeFallback.InvokeMember("Сообщить", BindingFlags.InvokeMethod, null, _oneCObject, new object[] { $"CTM Error in {eventName}: {ex.Message}" });
+                    }
+                    catch { /* Fallback fail */ }
+                }
+            }
         }
 
         private void LogToFile(string message)
@@ -306,7 +341,7 @@ namespace CTMOleClient
                 Directory.CreateDirectory(Path.GetDirectoryName(logPath));
                 File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
             }
-            catch { /* Ignore */ }
+            catch { }
         }
     }
 }

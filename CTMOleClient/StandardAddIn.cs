@@ -18,15 +18,18 @@ namespace CTMOleClient
     [ComVisible(true)]
     public abstract class InitAddIn : IInitDone
     {
+        protected object _oneCObject;  // Объект 1С для вызовов событий (глобальный контекст или модуль)
         private int m_Version = 1000;  // Версия для 1C 8.3+
 
-        public void Init(object pConnection)
+        public virtual void Init(object pConnection)
         {
-            // Инициализация CTM (Utils.Instance)
+            _oneCObject = pConnection;  // Сохраняем для вызовов из колбеков
+            // Инициализация CTM (Utils.Instance) — перенести в наследника, если нужно
         }
 
-        public void Done()
+        public virtual void Done()
         {
+            _oneCObject = null;
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }
