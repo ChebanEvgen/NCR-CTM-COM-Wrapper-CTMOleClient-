@@ -45,7 +45,6 @@ namespace CTMOleClient
 
         public CTMWrapper() : base() {}
 
-
         private CtmCClient.OnDeviceErrorCallBack _deviceErrorCallback;
         private CtmCClient.OnCashAcceptCallBack _cashAcceptCallback;
         private CtmCClient.OnCashAcceptCompleteCallBack _cashAcceptCompleteCallback;
@@ -62,15 +61,15 @@ namespace CTMOleClient
 
         public override void Init(object pConnection)
         {
+            LogToFile("Init: called.");
             SetConnection(pConnection);  
-                                         
         }
 
         public void SetConnection(object pConnection)
         {
             _oneCObject = pConnection;  // ЭтаФорма из 1С
             _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
-            LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] SetConnection: UI Context captured for 1C 8.2 form ({_uiContext.GetType().Name}).");
+            LogToFile($"SetConnection: UI Context captured for 1C 8.2 form ({_uiContext.GetType().Name}).");
         }
 
         public override void Done()
@@ -80,14 +79,18 @@ namespace CTMOleClient
             GC.WaitForPendingFinalizers();
 
             base.Done();  
-            LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Done: UI Context freed.");
+            LogToFile("Done: UI Context freed and finalizers executed.");
         }
 
-        public string GetLastError() => _lastError;
+        public string GetLastError()
+        {
+            LogToFile($"GetLastError: returning '{_lastError}'.");
+            return _lastError;
+        }
 
         public bool Initialize(string clientId, string overrideHost = null, string overridePort = null)
         {
-            try
+            LogToFile($"Initialize: called with clientId='{clientId}', overrideHost='{overrideHost ?? "null"}', overridePort='{overridePort ?? "null"}'.");            try
             {
                 _lastError = "";
                 string serviceLocation = overrideHost ?? "localhost";
@@ -101,46 +104,61 @@ namespace CTMOleClient
                     AddCallbacks();
                     _lastError = "OK";
                     _currentTransactionId = string.Empty;
-                    LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Initialize: SUCCESS on x86 (host: {serviceLocation}, port: {portNumber}).");
+                    LogToFile($"Initialize: SUCCESS (host: {serviceLocation}, port: {portNumber}).");
                     return true;
                 }
                 _lastError = result.ToString();
-                LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Initialize: FAILED ({result}) (host: {serviceLocation}, port: {portNumber}).");
+                LogToFile($"Initialize: FAILED ({result}) (host: {serviceLocation}, port: {portNumber}).");
                 return false;
             }
             catch (Exception ex)
             {
                 _lastError = ex.Message;
-                LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Initialize: EXCEPTION {ex.Message}.");
+                LogToFile($"Initialize: EXCEPTION {ex.Message}.");
                 return false;
             }
         }
 
         public void Uninitialize()
         {
-            _uiContext = null; 
-            GC.Collect();      
-            GC.WaitForPendingFinalizers();
+            LogToFile("Uninitialize: called.");
+            try
+            {
+                UnadviseEvents();  
+                CtmCClient.Uninitialize();  
+                _currentTransactionId = string.Empty;
+                _lastError = "Uninitialized";
+                _uiContext = null;
 
-            UnadviseEvents();
-            CtmCClient.Uninitialize();
-            _currentTransactionId = string.Empty;
-            _lastError = "Uninitialized";
-            LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Uninitialize: Called. UI Context freed.");
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();  
+
+                LogToFile("Uninitialize: Complete, handlers freed, GC done.");
+            }
+            catch (Exception ex)
+            {
+                _lastError = ex.Message;
+                LogToFile($"Uninitialize error: {ex.Message}");
+            }
         }
 
         public bool Reinitialize(string clientId, string overrideHost = null, string overridePort = null)
         {
+            LogToFile($"Reinitialize: called for clientId='{clientId}'.");
             Uninitialize();
-            return Initialize(clientId, overrideHost, overridePort);
+            var result = Initialize(clientId, overrideHost, overridePort);
+            LogToFile($"Reinitialize: result = {(result ? "SUCCESS" : "FAIL")}");
+            return result;
         }
 
         public string GetConfig(string key)
         {
+            LogToFile($"GetConfig: called for key='{key}'.");
             try
             {
                 var configResult = CtmCClient.GetConfig();
-                LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] GetConfig: Called.");
+                LogToFile("GetConfig: native call returned.");
                 if (configResult.config.count == 0) return string.Empty;
 
                 string value = string.Empty;
@@ -150,7 +168,7 @@ namespace CTMOleClient
                 {
                     IntPtr itemPtr = IntPtr.Add(ptr, i * size);
                     CTMConfigurationKeyValue kv = (CTMConfigurationKeyValue)Marshal.PtrToStructure(itemPtr, typeof(CTMConfigurationKeyValue));
-                    LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {kv.key}: {kv.value} ");
+                    LogToFile($"{kv.key}: {kv.value}");
 
                     if (kv.key == key)
                     {
@@ -162,14 +180,17 @@ namespace CTMOleClient
             }
             catch
             {
+                LogToFile("GetConfig: exception occurred while retrieving key.");
                 return string.Empty;
             }
         }
 
         public bool BeginCustomerTransaction(string txnId)
         {
+            LogToFile($"BeginCustomerTransaction: called txnId='{txnId}'.");
             var result = CtmCClient.BeginCustomerTransaction(txnId);
             _lastError = result.error.ToString();
+            LogToFile($"BeginCustomerTransaction: result={result.error}.");
             if (result.error == CTMBeginTransactionError.CTM_BEGIN_TRX_SUCCESS)
             {
                 _currentTransactionId = txnId;
@@ -180,8 +201,10 @@ namespace CTMOleClient
 
         public bool EndCustomerTransaction(string txnId)
         {
+            LogToFile($"EndCustomerTransaction: called txnId='{txnId}'.");
             var result = CtmCClient.EndCustomerTransaction(txnId);
             _lastError = result.ToString();
+            LogToFile($"EndCustomerTransaction: result={result}.");
             if (result == CTMEndTransactionResult.CTM_END_TRX_SUCCESS)
             {
                 _currentTransactionId = string.Empty;
@@ -192,27 +215,34 @@ namespace CTMOleClient
 
         public bool AcceptCash(int amount)
         {
+            LogToFile($"AcceptCash: requested amount={amount}.");
             var result = CtmCClient.AcceptCash(amount);
             _lastError = result.ToString();
+            LogToFile($"AcceptCash: result={result}.");
             return result == CTMAcceptCashRequestResult.CTM_ACCEPT_CASH_SUCCESS;
         }
 
         public bool StopAcceptingCash()
         {
+            LogToFile("StopAcceptingCash: called.");
             var result = CtmCClient.StopAcceptingCash();
             _lastError = result.ToString();
+            LogToFile($"StopAcceptingCash: result={result}.");
             return result == CTMStopAcceptingCashResult.CTM_STOP_ACCEPTING_CASH_SUCCESS;
         }
 
         public bool DispenseCash(int amount)
         {
+            LogToFile($"DispenseCash: requested amount={amount}.");
             CTMDispenseCashResult result = CtmCClient.DispenseCash(amount);
             _lastError = result.error.ToString();
+            LogToFile($"DispenseCash: result={result.error}.");
             return result.error == CTMDispenseCashError.CTM_DISPENSE_CASH_SUCCESS;
         }
 
         public ArrayList GetDispensableCashCounts()
         {
+            LogToFile("GetDispensableCashCounts: called.");
             var list = new ArrayList();
             try
             {
@@ -220,6 +250,7 @@ namespace CTMOleClient
                 if (countsResult.error != CTMGetCashCountsError.CTM_GET_CASH_COUNTS_SUCCESS)
                 {
                     _lastError = countsResult.error.ToString();
+                    LogToFile($"GetDispensableCashCounts: native error {countsResult.error}.");
                     return list;
                 }
 
@@ -245,17 +276,20 @@ namespace CTMOleClient
                 CtmCClient.FreeCashUnitSetContents(ref cashUnitSet);
 
                 _lastError = "OK";
+                LogToFile($"GetDispensableCashCounts: returned {list.Count} items.");
                 return list;
             }
             catch (Exception ex)
             {
                 _lastError = ex.Message;
+                LogToFile($"GetDispensableCashCounts: exception {ex.Message}.");
                 return list;
             }
         }
 
         public ArrayList GetNonDispensableCashCounts()
         {
+            LogToFile("GetNonDispensableCashCounts: called.");
             var list = new ArrayList();
             try
             {
@@ -263,6 +297,7 @@ namespace CTMOleClient
                 if (countsResult.error != CTMGetCashCountsError.CTM_GET_CASH_COUNTS_SUCCESS)
                 {
                     _lastError = countsResult.error.ToString();
+                    LogToFile($"GetNonDispensableCashCounts: native error {countsResult.error}.");
                     return list;
                 }
 
@@ -288,25 +323,77 @@ namespace CTMOleClient
                 CtmCClient.FreeCashUnitSetContents(ref cashUnitSet);
 
                 _lastError = "OK";
+                LogToFile($"GetNonDispensableCashCounts: returned {list.Count} items.");
                 return list;
             }
             catch (Exception ex)
             {
                 _lastError = ex.Message;
+                LogToFile($"GetNonDispensableCashCounts: exception {ex.Message}.");
                 return list;
             }
         }
 
         public void AdviseEvents()
         {
+            LogToFile("AdviseEvents: called.");
             _eventsEnabled = true;
-            LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] AdviseEvents: ENABLED for 1C x86.");
+            LogToFile("AdviseEvents: ENABLED for 1C x86.");
         }
 
         public void UnadviseEvents()
         {
-            _eventsEnabled = false;
-            LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] UnadviseEvents: DISABLED.");
+            LogToFile("UnadviseEvents: called.");
+            try
+            {
+                if (_deviceErrorCallback != null)
+                {
+                    CtmCClient.RemoveDeviceErrorEventHandler(_deviceErrorCallback);
+                    _deviceErrorCallback = null;
+                }
+                if (_cashAcceptCallback != null)
+                {
+                    CtmCClient.RemoveCashAcceptEventHandler(_cashAcceptCallback);
+                    _cashAcceptCallback = null;
+                }
+                if (_cashAcceptCompleteCallback != null)
+                {
+                    CtmCClient.RemoveCashAcceptCompleteEventHandler(_cashAcceptCompleteCallback);
+                    _cashAcceptCompleteCallback = null;
+                }
+                if (_deviceStatusCallback != null)
+                {
+                    CtmCClient.RemoveDeviceStatusEventHandler(_deviceStatusCallback);
+                    _deviceStatusCallback = null;
+                }
+                if (_socketClosedCallback != null)
+                {
+                    CtmCClient.RemoveSocketClosedEventHandler(_socketClosedCallback);
+                    _socketClosedCallback = null;
+                }
+                if (_changeContextCallback != null)
+                {
+                    CtmCClient.RemoveChangeContextEventHandler(_changeContextCallback);
+                    _changeContextCallback = null;
+                }
+                if (_authenticationCallback != null)
+                {
+                    CtmCClient.RemoveAuthenticationEventHandler(_authenticationCallback); 
+                    _authenticationCallback = null;
+                }
+                if (_cmClosedCallback != null)
+                {
+                    CtmCClient.RemoveCMClosedEventHandler(_cmClosedCallback);
+                    _cmClosedCallback = null;
+                }
+
+                _eventsEnabled = false;
+                LogToFile("UnadviseEvents: All handlers removed.");
+            }
+            catch (Exception ex)
+            {
+                LogToFile($"UnadviseEvents error: {ex.Message}");
+            }
         }
 
         private void AddCallbacks()
@@ -464,31 +551,32 @@ namespace CTMOleClient
         public void SetLogPath(string logPath)
         {
             _logPath = string.IsNullOrEmpty(logPath) ? null : logPath;
-            LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Log path set to: {_logPath ?? "disabled"}.");
         }
 
         public string GetLogPath()
         {
+            LogToFile($"GetLogPath: returning '{_logPath ?? string.Empty}'.");
             return _logPath ?? string.Empty;
         }
 
         public object GetFullConfig()
         {
+            LogToFile("GetFullConfig: called.");
             try
             {
                 _lastError = "";
                 var configResult = CtmCClient.GetConfig();
-                LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] GetFullConfig: Получен config с {configResult.config.count} записями.");
+                LogToFile($"GetFullConfig: received config with {configResult.config.count} entries.");
 
                 if (configResult.config.count == 0)
                 {
                     _lastError = "Config empty";
-                    LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] GetFullConfig: Пустой config.");
+                    LogToFile("GetFullConfig: Config empty.");
                     return new ConfigInfo(configResult.config);  
                 }
 
                 var configInfo = new ConfigInfo(configResult.config);
-                LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] GetFullConfig: Заполнены ключи - Notes: {configInfo.AcceptedNoteDenominations}, Coins: {configInfo.AcceptedCoinDenominations} и т.д.");
+                LogToFile("GetFullConfig: ConfigInfo constructed.");
 
                 _lastError = "OK";
                 return configInfo;
@@ -496,7 +584,7 @@ namespace CTMOleClient
             catch (Exception ex)
             {
                 _lastError = ex.Message;
-                LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] GetFullConfig: EXCEPTION {ex.Message}.");
+                LogToFile($"GetFullConfig: EXCEPTION {ex.Message}.");
                 return new ConfigInfo(new CTMConfiguration { count = 0 });  
             }
         }
