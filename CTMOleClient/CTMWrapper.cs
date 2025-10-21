@@ -32,7 +32,7 @@ namespace CTMOleClient
         void AdviseEvents();
         void UnadviseEvents();
         void SetConnection(object pConnection);
-
+        object GetFullConfig();
     }
 
     [ComVisible(true)]
@@ -50,6 +50,10 @@ namespace CTMOleClient
         private CtmCClient.OnCashAcceptCallBack _cashAcceptCallback;
         private CtmCClient.OnCashAcceptCompleteCallBack _cashAcceptCompleteCallback;
         private CtmCClient.OnDeviceStatusCallBack _deviceStatusCallback;
+        private CtmCClient.OnSocketClosedCallBack _socketClosedCallback;
+        private CtmCClient.OnChangeContextCallBack _changeContextCallback;
+        private CtmCClient.OnAuthenticationCallBack _authenticationCallback;
+        private CtmCClient.OnCMClosedCallBack _cmClosedCallback;
 
         private string _lastError = string.Empty;
         private string _currentTransactionId = string.Empty;
@@ -311,11 +315,20 @@ namespace CTMOleClient
             _cashAcceptCallback = HandleCashAccept;
             _cashAcceptCompleteCallback = HandleCashAcceptComplete;
             _deviceStatusCallback = HandleDeviceStatus;
+            _socketClosedCallback = HandleSocketClosed;
+            _changeContextCallback = HandleChangeContext;
+            _authenticationCallback = HandleAuthentication;
+            _cmClosedCallback = HandleCMClosed;
 
             CtmCClient.AddDeviceErrorEventHandler(_deviceErrorCallback);
             CtmCClient.AddCashAcceptEventHandler(_cashAcceptCallback);
             CtmCClient.AddCashAcceptCompleteEventHandler(_cashAcceptCompleteCallback);
             CtmCClient.AddDeviceStatusEventHandler(_deviceStatusCallback);
+           
+            CtmCClient.AddSocketClosedEventHandler(_socketClosedCallback);
+            CtmCClient.AddChangeContextEventHandler(_changeContextCallback);
+            CtmCClient.AddAuthenticationEventHandler(_authenticationCallback);
+            CtmCClient.AddCMClosedEventHandler(_cmClosedCallback);
         }
 
         private void HandleDeviceError(CTMEventInfo evtInfo, CTMDeviceError deviceError)
@@ -356,6 +369,55 @@ namespace CTMOleClient
                 _uiContext.Post(_ => InvokeOneCEvent("OnDeviceStatus", new object[] { statusInfo }), null);
             }
         }
+       
+        private void HandleSocketClosed(CTMEventInfo evtInfo)
+        {
+            string info = "Соединение с CTM-сервисом закрыто.";
+            LogToFile($"SocketClosed: {info}");
+            if (_eventsEnabled && _uiContext != null)
+            {
+                _uiContext.Post(_ => InvokeOneCEvent("OnSocketClosed", new object[] { info }), null);
+            }
+        }
+
+        private void HandleChangeContext(CTMEventInfo evtInfo, CTMContextEvent context)
+        {
+            string info = $"Смена контекста: {context.context}, Владелец: {context.clientOwner}";
+            LogToFile($"ChangeContext: {info}");
+            if (_eventsEnabled && _uiContext != null)
+            {
+                _uiContext.Post(_ => InvokeOneCEvent("OnChangeContext", new object[] { info }), null);
+            }
+        }
+
+        private void HandleAuthentication(CTMEventInfo evtInfo, CTMAuthenticationEvent authEvent)
+        {
+            try
+            {
+                bool isHC = (authEvent.isHCashier == CTMBoolean.CTM_TRUE);
+                string info = $"Аутентификация: Пользователь={authEvent.cmUsername}, HCashier={isHC}";
+                LogToFile($"Authentication: {info} (пароль скрыт для лога)");
+
+                if (_eventsEnabled && _uiContext != null)
+                {
+                    _uiContext.Post(_ => InvokeOneCEvent("OnAuthentication", new object[] { authEvent.cmUsername, isHC }), null);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToFile($"HandleAuthentication: Ошибка обработки события - {ex.Message}");
+            }
+        }
+
+        private void HandleCMClosed(CTMEventInfo evtInfo)
+        {
+            string info = "Cash Management приложение закрыто.";
+            LogToFile($"CMClosed: {info}");
+            if (_eventsEnabled && _uiContext != null)
+            {
+                _uiContext.Post(_ => InvokeOneCEvent("OnCMClosed", new object[] { info }), null);
+            }
+        }
 
         private void InvokeOneCEvent(string eventName, object[] parameters)
         {
@@ -386,7 +448,6 @@ namespace CTMOleClient
             }
         }
 
-
         private void LogToFile(string message)
         {
             if (string.IsNullOrEmpty(_logPath)) return; 
@@ -409,6 +470,35 @@ namespace CTMOleClient
         public string GetLogPath()
         {
             return _logPath ?? string.Empty;
+        }
+
+        public object GetFullConfig()
+        {
+            try
+            {
+                _lastError = "";
+                var configResult = CtmCClient.GetConfig();
+                LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] GetFullConfig: Получен config с {configResult.config.count} записями.");
+
+                if (configResult.config.count == 0)
+                {
+                    _lastError = "Config empty";
+                    LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] GetFullConfig: Пустой config.");
+                    return new ConfigInfo(configResult.config);  
+                }
+
+                var configInfo = new ConfigInfo(configResult.config);
+                LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] GetFullConfig: Заполнены ключи - Notes: {configInfo.AcceptedNoteDenominations}, Coins: {configInfo.AcceptedCoinDenominations} и т.д.");
+
+                _lastError = "OK";
+                return configInfo;
+            }
+            catch (Exception ex)
+            {
+                _lastError = ex.Message;
+                LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] GetFullConfig: EXCEPTION {ex.Message}.");
+                return new ConfigInfo(new CTMConfiguration { count = 0 });  
+            }
         }
     }
 }

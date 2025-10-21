@@ -63,6 +63,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CashUnitInfo.cs" />
+    <Compile Include="ConfigInfo.cs" />
     <Compile Include="CTMWrapper.cs" />
     <Compile Include="DllImport.cs" />
     <Compile Include="Enum.cs" />
