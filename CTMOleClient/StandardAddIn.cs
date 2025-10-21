@@ -23,8 +23,8 @@ namespace CTMOleClient
 
         public virtual void Init(object pConnection)
         {
-            _oneCObject = pConnection;  // Сохраняем для вызовов из колбеков
-            // Инициализация CTM (Utils.Instance) — перенести в наследника, если нужно
+            _oneCObject = pConnection;  
+      
         }
 
         public virtual void Done()

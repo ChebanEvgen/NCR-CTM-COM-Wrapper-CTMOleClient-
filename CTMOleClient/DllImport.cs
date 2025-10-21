@@ -6,9 +6,7 @@ namespace CTMOnCSharp
     public partial class CtmCClient
     {
 
-        [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_customer_transaction", CallingConvention = CallingConvention.Cdecl)]
-        public static extern CTMEndTransactionResult EndCustomerTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
-
+        
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void OnCashAcceptCallBack(CTMEventInfo evtInfo, CTMAcceptEvent acceptEvent);
 
@@ -110,7 +108,7 @@ namespace CTMOnCSharp
         public static extern CTMBeginTransactionResult BeginCustomerTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
 
         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_transaction", CallingConvention = CallingConvention.Cdecl)]
-        public static extern CTMEndTransactionResult EndTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
+        public static extern CTMEndTransactionResult EndCustomerTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
 
         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_accept_cash", CallingConvention = CallingConvention.Cdecl)]
         public static extern CTMAcceptCashRequestResult AcceptCash([MarshalAs(UnmanagedType.U4)] int targetAmount);

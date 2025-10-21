@@ -1,0 +1,354 @@
+diff --git a/CTMOleClient/CTMOleClient.csproj b/CTMOleClient/CTMOleClient.csproj
+index d4bb61d..99c39e7 100644
+--- a/CTMOleClient/CTMOleClient.csproj
++++ b/CTMOleClient/CTMOleClient.csproj
+@@ -62,6 +62,7 @@
+     <Reference Include="System.Xml" />
+   </ItemGroup>
+   <ItemGroup>
++    <Compile Include="CashUnitInfo.cs" />
+     <Compile Include="CTMWrapper.cs" />
+     <Compile Include="DllImport.cs" />
+     <Compile Include="Enum.cs" />
+diff --git a/CTMOleClient/CTMWrapper.cs b/CTMOleClient/CTMWrapper.cs
+index 7f5c70b..405da0e 100644
+--- a/CTMOleClient/CTMWrapper.cs
++++ b/CTMOleClient/CTMWrapper.cs
+@@ -1,10 +1,12 @@
+-﻿using System;
+-using System.Runtime.InteropServices;
+-using System.Text;
++﻿using CTMOnCSharp;
++using System;
++using System.Collections;
++using System.Collections.Generic;
+ using System.IO;
+ using System.Reflection;
++using System.Runtime.InteropServices;
++using System.Text;
+ using System.Threading;
+-using CTMOnCSharp;
+ 
+ namespace CTMOleClient
+ {
+@@ -13,9 +15,11 @@ namespace CTMOleClient
+     [InterfaceType(ComInterfaceType.InterfaceIsDual)]
+     public interface ICTMWrapper
+     {
+-        string Initialize(string clientId, string overrideHost = null, string overridePort = null);
++        bool Initialize(string clientId, string overrideHost = null, string overridePort = null);
+         void Uninitialize();
+-        string Reinitialize(string clientId, string overrideHost = null, string overridePort = null);
++        void SetLogPath(string logPath);
++        string GetLogPath();
++        bool Reinitialize(string clientId, string overrideHost = null, string overridePort = null);
+         string GetLastError();
+         string GetConfig(string key);
+         bool BeginCustomerTransaction(string txnId);
+@@ -23,8 +27,8 @@ namespace CTMOleClient
+         bool AcceptCash(int amount);
+         bool StopAcceptingCash();
+         bool DispenseCash(int amount);
+-        string GetDispensableCashCounts();
+-        string GetNonDispensableCashCounts();
++        ArrayList GetDispensableCashCounts();
++        ArrayList GetNonDispensableCashCounts();
+         void AdviseEvents();
+         void UnadviseEvents();
+         void SetConnection(object pConnection);
+@@ -37,7 +41,10 @@ namespace CTMOleClient
+     [ClassInterface(ClassInterfaceType.None)]
+     public class CTMWrapper : StandardAddIn, ICTMWrapper
+     {
+-        public CTMWrapper() : base() { }
++        private string _logPath = null;
++
++        public CTMWrapper() : base() {}
++
+ 
+         private CtmCClient.OnDeviceErrorCallBack _deviceErrorCallback;
+         private CtmCClient.OnCashAcceptCallBack _cashAcceptCallback;
+@@ -64,20 +71,23 @@ namespace CTMOleClient
+ 
+         public override void Done()
+         {
+-            _uiContext = null;
+-            base.Done();
++            _uiContext = null;  
++            GC.Collect();       
++            GC.WaitForPendingFinalizers();
++
++            base.Done();  
++            LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Done: UI Context freed.");
+         }
+ 
+         public string GetLastError() => _lastError;
+ 
+-        public string Initialize(string clientId, string overrideHost = null, string overridePort = null)
++        public bool Initialize(string clientId, string overrideHost = null, string overridePort = null)
+         {
+             try
+             {
+                 _lastError = "";
+-                Utils utils = Utils.Instance;
+-                string serviceLocation = overrideHost ?? (utils.Properties.ContainsKey("rpc.host") ? utils.Properties["rpc.host"] : "localhost");
+-                string portNumber = overridePort ?? (utils.Properties.ContainsKey("rpc.port") ? utils.Properties["rpc.port"] : "3636");
++                string serviceLocation = overrideHost ?? "localhost";
++                string portNumber = overridePort ?? "3636";
+                 string serviceConnection = $"ctm://{serviceLocation}:{portNumber}";
+ 
+                 var result = CtmCClient.Initialize(serviceConnection, clientId, CTMClientType.CTM_POS);
+@@ -87,31 +97,35 @@ namespace CTMOleClient
+                     AddCallbacks();
+                     _lastError = "OK";
+                     _currentTransactionId = string.Empty;
+-                    LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Initialize: SUCCESS on x86.");
+-                    return "OK";
++                    LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Initialize: SUCCESS on x86 (host: {serviceLocation}, port: {portNumber}).");
++                    return true;
+                 }
+                 _lastError = result.ToString();
+-                LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Initialize: FAILED ({result}).");
+-                return _lastError;
++                LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Initialize: FAILED ({result}) (host: {serviceLocation}, port: {portNumber}).");
++                return false;
+             }
+             catch (Exception ex)
+             {
+                 _lastError = ex.Message;
+                 LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Initialize: EXCEPTION {ex.Message}.");
+-                return _lastError;
++                return false;
+             }
+         }
+ 
+         public void Uninitialize()
+         {
++            _uiContext = null; 
++            GC.Collect();      
++            GC.WaitForPendingFinalizers();
++
+             UnadviseEvents();
+             CtmCClient.Uninitialize();
+             _currentTransactionId = string.Empty;
+             _lastError = "Uninitialized";
+-            LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Uninitialize: Called.");
++            LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Uninitialize: Called. UI Context freed.");
+         }
+ 
+-        public string Reinitialize(string clientId, string overrideHost = null, string overridePort = null)
++        public bool Reinitialize(string clientId, string overrideHost = null, string overridePort = null)
+         {
+             Uninitialize();
+             return Initialize(clientId, overrideHost, overridePort);
+@@ -122,6 +136,7 @@ namespace CTMOleClient
+             try
+             {
+                 var configResult = CtmCClient.GetConfig();
++                LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] GetConfig: Called.");
+                 if (configResult.config.count == 0) return string.Empty;
+ 
+                 string value = string.Empty;
+@@ -131,6 +146,8 @@ namespace CTMOleClient
+                 {
+                     IntPtr itemPtr = IntPtr.Add(ptr, i * size);
+                     CTMConfigurationKeyValue kv = (CTMConfigurationKeyValue)Marshal.PtrToStructure(itemPtr, typeof(CTMConfigurationKeyValue));
++                    LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {kv.key}: {kv.value} ");
++
+                     if (kv.key == key)
+                     {
+                         value = kv.value;
+@@ -190,53 +207,89 @@ namespace CTMOleClient
+             return result.error == CTMDispenseCashError.CTM_DISPENSE_CASH_SUCCESS;
+         }
+ 
+-        public string GetDispensableCashCounts()
++        public ArrayList GetDispensableCashCounts()
+         {
++            var list = new ArrayList();
+             try
+             {
+                 CTMGetCashCountsResult countsResult = CtmCClient.GetDispensableCashCounts();
+-                if (countsResult.error != 0) return string.Empty;
++                if (countsResult.error != CTMGetCashCountsError.CTM_GET_CASH_COUNTS_SUCCESS)
++                {
++                    _lastError = countsResult.error.ToString();
++                    return list;
++                }
+ 
+-                var sb = new StringBuilder("Dispensable Cash Counts:\n");
+                 var cashUnitSet = countsResult.cashUnitSet;
+                 IntPtr ptr = cashUnitSet.intPtr;
+                 int size = Marshal.SizeOf(typeof(CTMCashUnit));
++
+                 for (int i = 0; i < cashUnitSet.count; i++)
+                 {
+                     IntPtr itemPtr = IntPtr.Add(ptr, i * size);
+                     CTMCashUnit unit = (CTMCashUnit)Marshal.PtrToStructure(itemPtr, typeof(CTMCashUnit));
+-                    sb.AppendLine($"Denom: {unit.denomination}, Count: {unit.count}");
++
++                    var info = new CashUnitInfo
++                    {
++                        Denomination = unit.denomination,
++                        Count = unit.count,
++                        Type = (int)unit.type,  // 0=COIN, 1=NOTE
++                        CurrencyCode = unit.currencyCode
++                    };
++                    list.Add(info);
+                 }
+-                return sb.ToString();
++
++                CtmCClient.FreeCashUnitSetContents(ref cashUnitSet);
++
++                _lastError = "OK";
++                return list;
+             }
+-            catch
++            catch (Exception ex)
+             {
+-                return string.Empty;
++                _lastError = ex.Message;
++                return list;
+             }
+         }
+ 
+-        public string GetNonDispensableCashCounts()
++        public ArrayList GetNonDispensableCashCounts()
+         {
++            var list = new ArrayList();
+             try
+             {
+                 CTMGetCashCountsResult countsResult = CtmCClient.GetNonDispensableCashCounts();
+-                if (countsResult.error != 0) return string.Empty;
++                if (countsResult.error != CTMGetCashCountsError.CTM_GET_CASH_COUNTS_SUCCESS)
++                {
++                    _lastError = countsResult.error.ToString();
++                    return list;
++                }
+ 
+-                var sb = new StringBuilder("Non-Dispensable Cash Counts:\n");
+                 var cashUnitSet = countsResult.cashUnitSet;
+                 IntPtr ptr = cashUnitSet.intPtr;
+                 int size = Marshal.SizeOf(typeof(CTMCashUnit));
++
+                 for (int i = 0; i < cashUnitSet.count; i++)
+                 {
+                     IntPtr itemPtr = IntPtr.Add(ptr, i * size);
+                     CTMCashUnit unit = (CTMCashUnit)Marshal.PtrToStructure(itemPtr, typeof(CTMCashUnit));
+-                    sb.AppendLine($"Denom: {unit.denomination}, Count: {unit.count}");
++
++                    var info = new CashUnitInfo
++                    {
++                        Denomination = unit.denomination,
++                        Count = unit.count,
++                        Type = (int)unit.type,  // 0=COIN, 1=NOTE
++                        CurrencyCode = unit.currencyCode
++                    };
++                    list.Add(info);
+                 }
+-                return sb.ToString();
++
++                CtmCClient.FreeCashUnitSetContents(ref cashUnitSet);
++
++                _lastError = "OK";
++                return list;
+             }
+-            catch
++            catch (Exception ex)
+             {
+-                return string.Empty;
++                _lastError = ex.Message;
++                return list;
+             }
+         }
+ 
+@@ -310,13 +363,13 @@ namespace CTMOleClient
+ 
+             try
+             {
+-                Type type = _oneCObject.GetType();  // Рефлексия на "Форма"
++                Type type = _oneCObject.GetType();  
+                 type.InvokeMember(eventName, BindingFlags.InvokeMethod, null, _oneCObject, parameters);
+                 LogToFile($"OneC Event {eventName} invoked OK on unmanaged form.");
+             }
+             catch (MissingMethodException ex)
+             {
+-                LogToFile($"OneC missing {eventName} on form: {ex.Message}");  // Если процедура не Экспорт
++                LogToFile($"OneC missing {eventName} on form: {ex.Message}"); 
+             }
+             catch (Exception ex)
+             {
+@@ -333,15 +386,29 @@ namespace CTMOleClient
+             }
+         }
+ 
++
+         private void LogToFile(string message)
+         {
++            if (string.IsNullOrEmpty(_logPath)) return; 
++
+             try
+             {
+-                string logPath = @"C:\Temp\CTMLogs.txt";
+-                Directory.CreateDirectory(Path.GetDirectoryName(logPath));
+-                File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
++              
++                Directory.CreateDirectory(Path.GetDirectoryName(_logPath));
++                File.AppendAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+             }
+-            catch { }
++            catch { }  // Silent fail
++        }
++
++        public void SetLogPath(string logPath)
++        {
++            _logPath = string.IsNullOrEmpty(logPath) ? null : logPath;
++            LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Log path set to: {_logPath ?? "disabled"}.");
++        }
++
++        public string GetLogPath()
++        {
++            return _logPath ?? string.Empty;
+         }
+     }
+ }
+\ No newline at end of file
+diff --git a/CTMOleClient/DllImport.cs b/CTMOleClient/DllImport.cs
+index 79fd191..5b57841 100644
+--- a/CTMOleClient/DllImport.cs
++++ b/CTMOleClient/DllImport.cs
+@@ -6,9 +6,7 @@ namespace CTMOnCSharp
+     public partial class CtmCClient
+     {
+ 
+-        [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_customer_transaction", CallingConvention = CallingConvention.Cdecl)]
+-        public static extern CTMEndTransactionResult EndCustomerTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
+-
++        
+         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+         public delegate void OnCashAcceptCallBack(CTMEventInfo evtInfo, CTMAcceptEvent acceptEvent);
+ 
+@@ -110,7 +108,7 @@ namespace CTMOnCSharp
+         public static extern CTMBeginTransactionResult BeginCustomerTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
+ 
+         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_transaction", CallingConvention = CallingConvention.Cdecl)]
+-        public static extern CTMEndTransactionResult EndTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
++        public static extern CTMEndTransactionResult EndCustomerTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
+ 
+         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_accept_cash", CallingConvention = CallingConvention.Cdecl)]
+         public static extern CTMAcceptCashRequestResult AcceptCash([MarshalAs(UnmanagedType.U4)] int targetAmount);
+diff --git a/CTMOleClient/StandardAddIn.cs b/CTMOleClient/StandardAddIn.cs
+index e7dfd45..9b0ae5e 100644
+--- a/CTMOleClient/StandardAddIn.cs
++++ b/CTMOleClient/StandardAddIn.cs
+@@ -23,8 +23,8 @@ namespace CTMOleClient
+ 
+         public virtual void Init(object pConnection)
+         {
+-            _oneCObject = pConnection;  // Сохраняем для вызовов из колбеков
+-            // Инициализация CTM (Utils.Instance) — перенести в наследника, если нужно
++            _oneCObject = pConnection;  
++      
+         }
+ 
+         public virtual void Done()
