@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 
 namespace CTMOnCSharp
@@ -39,17 +39,15 @@ namespace CTMOnCSharp
         public CTMStartUpCMAppError error;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public struct CTMBeginTransactionResult
-    {
-        public IntPtr intPtr;
-        public string transactionId
-        {
-            get { return Marshal.PtrToStringAnsi(intPtr); }
-        }
 
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    public struct BeginCustomerTransactionResult
+    {
         public CTMBeginTransactionError error;
-    };
+        [MarshalAs(UnmanagedType.LPStr)]
+        public IntPtr transactionId;
+    }
+
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct CTMDispenseCashResult
@@ -71,6 +69,22 @@ namespace CTMOnCSharp
         }
     };
 
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct CTMBeginCashManagementTransactionRequest
+    {
+        [MarshalAs(UnmanagedType.LPStr)] public string userId;
+        [MarshalAs(UnmanagedType.LPStr)] public string cashierId;
+        public CTMBeginTransactionResult result;  
+    };
+
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [ComVisible(true)]
+    public struct CTMEndRefillResult
+    {
+        public int totalAmount;
+        public CTMAcceptCashRequestResult error;
+    }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
     public struct CTMEventInfo

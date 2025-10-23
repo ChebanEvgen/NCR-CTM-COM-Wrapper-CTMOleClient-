@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 
 namespace CTMOnCSharp
@@ -82,15 +82,18 @@ namespace CTMOnCSharp
 
     public enum CTMBeginTransactionError
     {
-        /** The transaction has been started. */
         CTM_BEGIN_TRX_SUCCESS,
-        /** You must end the previous transaction before beginning a new one. */
         CTM_BEGIN_TRX_ERROR_ALREADY_IN_PROGRESS,
-        /** The client is not connected to the CTM service. */
         CTM_BEGIN_TRX_ERROR_NOT_CONNECTED,
-        /** An unhandled exception occurred. */
         CTM_BEGIN_TRX_ERROR_UNHANDLED_EXCEPTION = 99
-    };
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    public struct CTMBeginTransactionResult
+    {
+        public CTMBeginTransactionError error;
+        public IntPtr transactionId;  // char* из C
+    }
 
     public enum CTMEndTransactionResult
     {
@@ -108,6 +111,7 @@ namespace CTMOnCSharp
         CTM_END_TRX_ERROR_UNHANDLED_EXCEPTION = 99
     };
 
+    [ComVisible(true)]
     public enum CTMAcceptCashRequestResult
     {
         CTM_ACCEPT_CASH_SUCCESS,
@@ -136,8 +140,9 @@ namespace CTMOnCSharp
 
     public enum CTMRefillLocation
     {
-        CTM_REFILL_COINS_THROUGH_VALIDATOR = 1,
-        CTM_REFILL_COINS_THROUGH_COIN_CHUTE
+        CTM_REFILL_COINS_THROUGH_VALIDATOR = 1,    
+        CTM_REFILL_NOTES_THROUGH_VALIDATOR = 2,    
+        CTM_REFILL_COINS_THROUGH_COIN_CHUTE = 3   
     };
 
     public enum CTMCashType
@@ -408,10 +413,12 @@ namespace CTMOnCSharp
 
     public enum CTMCMOperationType
     {
+
         CTM_CM_NONE = 0,
-        CTM_CM_LOAN,
-        CTM_CM_PICKUP,
-        CTM_CM_BALANCE,
+        CTM_CM_LOAN = 1, 
+        CTM_CM_PICKUP = 2, 
+        CTM_CM_BALANCE = 3, 
+        CTM_CM_REFILL = 4,
         CTM_CM_OPERATOR,
         CTM_CM_HCASHIER,
         CTM_CM_PRINTER_DATA,
@@ -450,4 +457,5 @@ namespace CTMOnCSharp
         CTM_AUTHENTICATION_PASSWORD_IS_INCORRECT,
         CTM_AUTHENTICATE_SUCCESS = 99
     }
+
 }

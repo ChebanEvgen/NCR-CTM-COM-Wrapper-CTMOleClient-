@@ -65,6 +65,7 @@
     <Compile Include="CashUnitInfo.cs" />
     <Compile Include="ConfigInfo.cs" />
     <Compile Include="CTMWrapper.cs" />
+    <Compile Include="DispenseCashResult.cs" />
     <Compile Include="DllImport.cs" />
     <Compile Include="Enum.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
