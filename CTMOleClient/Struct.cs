@@ -3,13 +3,15 @@ using System.Runtime.InteropServices;
 
 namespace CTMOnCSharp
 {
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMGetConfigResult
     {
         public CTMConfiguration config;
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMConfiguration
     {
         public int count;
@@ -23,7 +25,8 @@ namespace CTMOnCSharp
         }
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMConfigurationKeyValue
     {
         [MarshalAs(UnmanagedType.LPStr)]
@@ -33,14 +36,16 @@ namespace CTMOnCSharp
         public string value;
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMStartUpCMAppResult
     {
         public CTMStartUpCMAppError error;
     };
 
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct BeginCustomerTransactionResult
     {
         public CTMBeginTransactionError error;
@@ -49,11 +54,12 @@ namespace CTMOnCSharp
     }
 
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMDispenseCashResult
     {
         [MarshalAs(UnmanagedType.I4)]
-        public UInt32 amountDispensed;
+        public int amountDispensed;
 
         public CTMCashUnitSet cashUnitSet;
 
@@ -69,7 +75,8 @@ namespace CTMOnCSharp
         }
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMBeginCashManagementTransactionRequest
     {
         [MarshalAs(UnmanagedType.LPStr)] public string userId;
@@ -78,7 +85,7 @@ namespace CTMOnCSharp
     };
 
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
     [ComVisible(true)]
     public struct CTMEndRefillResult
     {
@@ -87,13 +94,15 @@ namespace CTMOnCSharp
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMEventInfo
     {
         [MarshalAs(UnmanagedType.I4)]
-        public UInt32 timestamp;
+        public int timestamp;
     };
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMAcceptEvent
     {
         [MarshalAs(UnmanagedType.U4)]
@@ -106,6 +115,7 @@ namespace CTMOnCSharp
     };
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMCashUnit
     {
         public CTMCashType type;
@@ -120,7 +130,8 @@ namespace CTMOnCSharp
         public string currencyCode;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMCashUnitSet
     {
         public int count;
@@ -136,7 +147,8 @@ namespace CTMOnCSharp
         }
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMGetCashCountsResult
     {
         public CTMCashUnitSet cashUnitSet;
@@ -144,7 +156,8 @@ namespace CTMOnCSharp
         public CTMGetCashCountsError error;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMGetCapacitiesResult
     {
         public CTMCashUnitSet dispensableCapacities;
@@ -161,7 +174,8 @@ namespace CTMOnCSharp
         public CTMGetCapacitiesError error;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMGetLoaderCassetteCountsResult
     {
         public CTMCashUnitSet loaderCassetteCounts;
@@ -169,7 +183,8 @@ namespace CTMOnCSharp
         public CTMGetLoaderCassetteCountsError error;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMPurgeCoinsResult
     {
         public CTMCashUnitSet purgeCoinCounts;
@@ -177,13 +192,15 @@ namespace CTMOnCSharp
         public CTMPurgeCoinsError error;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMReadFailedNoteCountsResult
     {
         public int failedNoteCounts;
     };
 	
-	[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+	[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMReadFailedCoinCountsResult
     {
         public int failedCoinCounts;
@@ -191,39 +208,44 @@ namespace CTMOnCSharp
         public CTMGetCashCountsError error;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMTransferFromBinToCashboxResult
     {
         public CTMTransferredCash transferredCash;
         public CTMTransferCashError error;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMTransferAllFromLoaderToCashboxResult 
     {
         public CTMTransferredCash transferredCash;
         public CTMTransferCashError error;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMTransferAllNotesToCashboxResult
     {
         public CTMTransferredCash transferredCash;
         public CTMTransferCashError error;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMTransferredCash
     {
         [MarshalAs(UnmanagedType.I4)]
-        public UInt32 transferredAmount;
+        public int transferredAmount;
 
         public CTMCashUnitSet cashUnitSet;
         public CTMCashTransferLocation source;
         public CTMCashTransferLocation destination;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMDeviceErrorDetails
     {
         public IntPtr intPtr;
@@ -264,6 +286,7 @@ namespace CTMOnCSharp
     };
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMDeviceError
     {
         public CTMDeviceInfo deviceInfo;
@@ -278,6 +301,7 @@ namespace CTMOnCSharp
     };
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMDeviceStatus
  	{
  	    public CTMDeviceInfo deviceInfo;
@@ -286,6 +310,7 @@ namespace CTMOnCSharp
  	};
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMAuthenticationRequest
     {
         [MarshalAs(UnmanagedType.LPStr)]
@@ -296,6 +321,7 @@ namespace CTMOnCSharp
     }
  	
  	[StructLayout(LayoutKind.Sequential, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMDeviceInfo
     {
         public CTMDeviceType deviceType;
@@ -310,6 +336,7 @@ namespace CTMOnCSharp
     };
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMContextEvent
     {
         [MarshalAs(UnmanagedType.LPStr)]
@@ -321,14 +348,16 @@ namespace CTMOnCSharp
         public IntPtr amountDue;
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMDeviceTestResult 
     {
         public CTMDeviceErrorSet deviceErrorSet;
         public CTMDeviceTestError error;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMDeviceErrorSet 
     {
         public int count;
@@ -343,7 +372,8 @@ namespace CTMOnCSharp
         }
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMCMOperationResult
     {
         public IntPtr intPtr;
@@ -355,13 +385,15 @@ namespace CTMOnCSharp
         public CTMCMErrorCode error;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMUploadCMDataResult
     {
         public CTMCMOperationResult result;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMDownloadCMDataResult
     {
         public IntPtr intPtr;
@@ -373,13 +405,15 @@ namespace CTMOnCSharp
         public CTMCMOperationResult result;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMGetDiagFilesResult
     {
         public CTMGetDiagFilesError error;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMReceiptFile
     {
         public IntPtr intPtr;
@@ -395,14 +429,16 @@ namespace CTMOnCSharp
         }
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMGetCMReceiptDataResult
     {
         public CTMReceiptFile receiptFile;
         public CTMGetCMReceiptDataStatus status;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [ComVisible(true)]
     public struct CTMAuthenticationEvent
     {
         [MarshalAs(UnmanagedType.LPStr)]

@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace CTMOnCSharp
 {
+    [ComVisible(true)]
     public enum Mode
     {
         INITIALIZE,
@@ -23,12 +24,14 @@ namespace CTMOnCSharp
         DEFAULT
     };
 
+    [ComVisible(true)]
     public enum HardwareType
     {
         R5,
         R6
     }
 
+    [ComVisible(true)]
     public enum CTMInitializationResult
     {
         /** The CTM client successfully connected to the CTM service. */
@@ -59,6 +62,7 @@ namespace CTMOnCSharp
         CTM_INIT_ERROR_UNHANDLED_EXCEPTION = 99
     };
 
+    [ComVisible(true)]
     public enum CTMStartUpCMAppError
     {
         /** The CTM Service was successful in starting up the Cash Management Application. */
@@ -80,6 +84,7 @@ namespace CTMOnCSharp
         CTM_STARTUP_CM_UNHANDLED_EXCEPTION = 99
     };
 
+    [ComVisible(true)]
     public enum CTMBeginTransactionError
     {
         CTM_BEGIN_TRX_SUCCESS,
@@ -89,12 +94,14 @@ namespace CTMOnCSharp
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    [ComVisible(true)]
     public struct CTMBeginTransactionResult
     {
         public CTMBeginTransactionError error;
         public IntPtr transactionId;  // char* из C
     }
 
+    [ComVisible(true)]
     public enum CTMEndTransactionResult
     {
         /** The transaction has ended. */
@@ -122,14 +129,16 @@ namespace CTMOnCSharp
         CTM_ACCEPT_CASH_ERROR_TARGET_AMOUNT_INVALID,
         CTM_ACCEPT_CASH_ERROR_UNHANDLED_EXCEPTION = 99
     };
-
+    
+    [ComVisible(true)]
     public enum CTMCMAppAuthenticationType
     {
         CTM_CM_ATN_TYPE_START_UP,
         CTM_CM_ATN_TYPE_DENY,
         CTM_CM_ATN_TYPE_APPROVE
     }
-
+    
+    [ComVisible(true)]
     public enum CTMStopAcceptingCashResult
     {
         CTM_STOP_ACCEPTING_CASH_SUCCESS,
@@ -138,19 +147,22 @@ namespace CTMOnCSharp
         CTM_STOP_ACCEPTING_CASH_ERROR_UNHANDLED_EXCEPTION = 99
     };
 
+    [ComVisible(true)]
     public enum CTMRefillLocation
     {
         CTM_REFILL_COINS_THROUGH_VALIDATOR = 1,    
         CTM_REFILL_NOTES_THROUGH_VALIDATOR = 2,    
         CTM_REFILL_COINS_THROUGH_COIN_CHUTE = 3   
     };
-
+    
+    [ComVisible(true)]
     public enum CTMCashType
     {
         CTM_CASH_TYPE_NOTE,
         CTM_CASH_TYPE_COIN
     };
 
+    [ComVisible(true)]
     public enum CTMPurgeCoinsError
     {
         CTM_PURGE_COINS_SUCCESS,
@@ -163,6 +175,7 @@ namespace CTMOnCSharp
         CTM_PURGE_COINS_UNHANDLED_EXCEPTION = 99
     };
 
+    [ComVisible(true)]
     public enum CTMPurgeCoinsLocation
     {
         CTM_PURGE_COINS_LOCATION_ALL,
@@ -170,6 +183,7 @@ namespace CTMOnCSharp
         CTM_PURGE_COINS_LOCATION_CASHBOX
     };
 
+    [ComVisible(true)]
     public enum CTMDispenseCashError
     {
         CTM_DISPENSE_CASH_SUCCESS,
@@ -182,6 +196,7 @@ namespace CTMOnCSharp
         CTM_DISPENSE_CASH_ERROR_UNHANDLED_EXCEPTION = 99
     };
 
+    [ComVisible(true)]
     public enum CTMGetCashCountsError
     {
         /** The CTM Service was able to get cash counts. */
@@ -196,6 +211,7 @@ namespace CTMOnCSharp
         CTM_GET_CASH_COUNTS_UNHANDLED_EXCEPTION = 99
     };
 
+    [ComVisible(true)]
     public enum CTMGetLoaderCassetteCountsError
     {
         /** The CTM Service was able to get loader cassette counts. */
@@ -212,6 +228,7 @@ namespace CTMOnCSharp
         CTM_GETLOADERCOUNTS_UNHANDLED_EXCEPTION = 99
     };
 
+    [ComVisible(true)]
     public enum CTMTransferCashError
     {
         /** The CTM Service was able to transfer cash. */
@@ -234,6 +251,7 @@ namespace CTMOnCSharp
         CTM_TRANSFER_UNHANDLED_EXCEPTION = 99
     };
 
+    [ComVisible(true)]
     public enum CTMCashTransferLocation
     {
         CTM_CASH_TRANSFER_LOCATION_NONE = 0,
@@ -256,6 +274,7 @@ namespace CTMOnCSharp
         CTM_CASH_TRANSFER_LOCATION_INDIVIDUAL_BIN = 3
     };
 
+    [ComVisible(true)]
     public enum CTMResetCountsResult
     {
         /** The CTM Service was able to set loader cassette and dispensable counts. */
@@ -270,6 +289,7 @@ namespace CTMOnCSharp
         CTM_RESET_COUNTS_UNHANDLED_EXCEPTION = 99
     };
 
+    [ComVisible(true)]
     public enum CTMSetCountsResult
     {
         /** The CTM Service was able to set loader cassette and dispensable counts. */
@@ -292,6 +312,7 @@ namespace CTMOnCSharp
         CTM_SET_COUNTS_UNHANDLED_EXCEPTION = 99
     };
 
+    [ComVisible(true)]
     public enum CTMClearPurgedStatusResult
     {
         /** The CTM Service was able to clear purge bills. */
@@ -302,6 +323,7 @@ namespace CTMOnCSharp
         CTM_CLEAR_PURGED_STATUS_NOT_CONNECTED
     };
 
+    [ComVisible(true)]
     public enum CTMGetPurgedStatusResult
     {
         /** The CTM Service was able to detect purge bills. */
@@ -312,6 +334,7 @@ namespace CTMOnCSharp
         CTM_GET_PURGED_STATUS_NOT_CONNECTED
     };
 
+    [ComVisible(true)]
     public enum CTMErrorDetailsResult
     {
         CTM_ERROR_DETAILS_SUCCESS = 0,
@@ -325,6 +348,7 @@ namespace CTMOnCSharp
         CTM_ERROR_DETAILS_RUNTIME_ERROR = -6
     };
 
+    [ComVisible(true)]
     public enum CTMDeviceType
     {
         /* CTM_DEVICETYPE_CASHCHANGER = 5,
@@ -356,6 +380,7 @@ namespace CTMOnCSharp
         CTM_DEVICETYPE_MAX_CLASSES = 22
     };
 
+    [ComVisible(true)]
     public enum CTMDeviceTestError
     {
         /** The CTM service was able to test the devices. */
@@ -366,6 +391,7 @@ namespace CTMOnCSharp
         CTM_DEVICE_TEST_ERROR_NOT_CONNECTED
     };
 
+    [ComVisible(true)]
     public enum CTMGetDiagFilesError
     {
         /** The CTM Service was successful in starting up the GetDiagFiles app */
@@ -387,6 +413,7 @@ namespace CTMOnCSharp
         CTM_GET_DIAG_FILES_UNHANDLED_EXCEPTION = 99
     };
 
+    [ComVisible(true)]
     public enum CTMGetCMReceiptDataStatus
     {
         /** The CTM Service was successful in getting CM Receipt data. */
@@ -411,6 +438,7 @@ namespace CTMOnCSharp
         CTM_GET_CM_RECEIPT_DATA_UNHANDLED_EXCEPTION = 99
     };
 
+    [ComVisible(true)]
     public enum CTMCMOperationType
     {
 
@@ -426,17 +454,20 @@ namespace CTMOnCSharp
         CTM_CM_REPORT_DATA
     };
 
+    [ComVisible(true)]
     public enum CTMCMErrorCode
     {
         CTM_CM_SUCCESS = 0,
         CTM_CM_FAILURE
     };
 
+    [ComVisible(true)]
     public enum CTMGetCapacitiesError
     {
         CTM_GET_CAPACITIES_NO_LOADER_CONFIGURED
     };
 
+    [ComVisible(true)]
     public enum CTMClientType
     {
         CTM_POS = 0,
@@ -445,12 +476,14 @@ namespace CTMOnCSharp
         CTM_NULL_TYPE
     };
 
+    [ComVisible(true)]
     public enum CTMBoolean
     {
         CTM_FALSE = 0,
         CTM_TRUE
     }
 
+    [ComVisible(true)]
     public enum CTMAuthenticateResult
     {
         CTM_AUTHENTICATION_USERNAME_IS_INCORRECT = 0,
