@@ -93,6 +93,7 @@ namespace CTMOnCSharp
         CTM_BEGIN_TRX_ERROR_UNHANDLED_EXCEPTION = 99
     }
 
+  
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     [ComVisible(true)]
     public struct CTMBeginTransactionResult
@@ -102,8 +103,16 @@ namespace CTMOnCSharp
         {
             get { return Marshal.PtrToStringAnsi(intPtr); }
         }
+
         public CTMBeginTransactionError error;
-    }
+    };
+
+
+
+
+
+
+
 
     [ComVisible(true)]
     public enum CTMEndTransactionResult

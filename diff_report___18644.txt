@@ -1,0 +1,209 @@
+diff --git a/CTMOleClient/CTMWrapper.cs b/CTMOleClient/CTMWrapper.cs
+index 11f8ba9..67a1616 100644
+--- a/CTMOleClient/CTMWrapper.cs
++++ b/CTMOleClient/CTMWrapper.cs
+@@ -752,58 +752,29 @@ namespace CTMOleClient
+ 
+         public bool BeginCashManagementTransaction(string userId, string cashierId, out string txnId)
+         {
+-            txnId = "";
++            txnId = string.Empty;  
+             LogToFile($"BeginCashManagementTransaction: userId='{userId}', cashierId='{cashierId}'");
++
+             try
+             {
+-                if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(cashierId))
+-                {
+-                    _lastError = "Invalid userId or cashierId";
+-                    LogToFile("✗ Invalid CM params");
+-                    return false;
+-                }
+-
+                 _lastError = "";
+-                IntPtr txnPtr;
+-                var error = CtmCClient.BeginCashManagementTransaction(userId, cashierId, out txnPtr); // Call with out IntPtr
+-                LogToFile($"BeginCM raw result: error={error}, txnPtr={txnPtr.ToInt64():X}");
+ 
+-                string generatedId = $"CM_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
++                string tempBuffer = string.Empty;
++                CTMBeginTransactionResult result = CtmCClient.BeginCashManagementTransaction(userId, cashierId, tempBuffer);
++
++                LogToFile($"BeginCM raw result: error={result.error}, transactionId from struct={result.transactionId}");
+ 
+-                // *** ИСПРАВЛЕНИЕ: Сначала проверяем код ошибки ***
+-                if (error == CTMBeginTransactionError.CTM_BEGIN_TRX_SUCCESS)
++                if (result.error == CTMBeginTransactionError.CTM_BEGIN_TRX_SUCCESS)
+                 {
+-                    // Успех. Теперь разбираемся с указателем.
+-                    if (txnPtr == IntPtr.Zero)
+-                    {
+-                        // HACK for emulators: Успех, но указатель пустой
+-                        txnId = generatedId;  // Fallback
+-                        _cmTxnId = txnId;
+-                        LogToFile($"✓ HACK: ptr NULL, but success — using generated ID: {txnId}");
+-                        return true;
+-                    }
+-                    else
+-                    {
+-                        // Нормальный случай: Успех и есть указатель
+-                        txnId = Marshal.PtrToStringAnsi(txnPtr) ?? generatedId;
+-                        _cmTxnId = txnId;
+-                        Marshal.FreeHGlobal(txnPtr); // Освобождаем память *после* использования
+-                        LogToFile($"✓ CM Transaction started: txnId={txnId}");
+-                        return true;
+-                    }
++                    _cmTxnId = result.transactionId;
++                    txnId = result.transactionId;
++                    LogToFile($"✓ CM Transaction started: txnId={_cmTxnId}");
++                    return true;
+                 }
+                 else
+                 {
+-                    // *** ОБРАБОТКА ОШИБКИ ***
+-                    // Теперь ошибка CTM_BEGIN_TRX_ERROR_ALREADY_IN_PROGRESS попадет сюда
+-                    _lastError = error.ToString();
+-                    LogToFile($"✗ CM Transaction failed: {error}");
+-
+-                    // На всякий случай освобождаем память, если она была выделена при ошибке
+-                    if (txnPtr != IntPtr.Zero)
+-                    {
+-                        Marshal.FreeHGlobal(txnPtr);
+-                    }
++                    _lastError = result.error.ToString();
++                    LogToFile($"✗ CM Transaction failed: {result.error}");
+                     return false;
+                 }
+             }
+@@ -814,7 +785,6 @@ namespace CTMOleClient
+                 return false;
+             }
+         }
+-
+         public bool EndCashManagementTransaction(string txnId)
+         {
+             LogToFile($"EndCashManagementTransaction: txnId='{txnId ?? _cmTxnId}'");
+@@ -829,24 +799,27 @@ namespace CTMOleClient
+                 }
+ 
+                 _lastError = "";
+-                var result = CtmCClient.EndCashManagementTransaction(actualTxnId);  // Теперь: CTMEndTransactionResult, без ambiguous
+-                LogToFile($"EndCM raw result: error={result} (int: {(int)result})");
+-
+-                // Хак для эмулятора: garbage >1e6 = OK
+-                bool success = (result == CTMEndTransactionResult.CTM_END_TRX_SUCCESS) ||
+-                               (result == CTMEndTransactionResult.CTM_END_TRX_ERROR_NO_TRANSACTION_IN_PROGRESS);  // Graceful: no txn = OK
+-                if (!success && (int)result > 1000000) success = true;
++                CTMEndTransactionResult result = CtmCClient.EndCashManagementTransaction(actualTxnId);
++                LogToFile($"EndCM raw result: {result} (int: {(int)result})");
+ 
+-                if (!success)
++                if (result == CTMEndTransactionResult.CTM_END_TRX_SUCCESS)
++                {
++                    _cmTxnId = "";  
++                    LogToFile($"✓ CM Transaction ended: txnId={actualTxnId}");
++                    return true;
++                }
++                else if (result == CTMEndTransactionResult.CTM_END_TRX_ERROR_NO_TRANSACTION_IN_PROGRESS)
++                {
++                    _cmTxnId = "";  
++                    LogToFile($"✓ No active txn — graceful end: {actualTxnId}");
++                    return true; 
++                }
++                else
+                 {
+-                    LogToFile($"✗ EndCM real error: {result}");
+                     _lastError = result.ToString();
++                    LogToFile($"✗ EndCM error: {result}");
+                     return false;
+                 }
+-
+-                _cmTxnId = "";  // Reset
+-                LogToFile($"✓ CM Transaction ended: txnId={actualTxnId}");
+-                return true;
+             }
+             catch (Exception ex)
+             {
+@@ -862,7 +835,7 @@ namespace CTMOleClient
+             {
+                 if (string.IsNullOrEmpty(_cmTxnId)) { _lastError = "No active CM transaction"; return CTMAcceptCashRequestResult.CTM_ACCEPT_CASH_ERROR_NEEDS_OPEN_TRANSACTION_ID; }
+                 _lastError = "";
+-                var result = CtmCClient.BeginRefill(targetAmount);  // Enables acceptors (from logs: Enable cash/coin acceptor)
++                var result = CtmCClient.BeginRefill(targetAmount);  
+                 if (result == CTMAcceptCashRequestResult.CTM_ACCEPT_CASH_SUCCESS)
+                 {
+                     LogToFile("Refill started: acceptors enabled");
+diff --git a/CTMOleClient/DllImport.cs b/CTMOleClient/DllImport.cs
+index af2dd12..f1c5ae3 100644
+--- a/CTMOleClient/DllImport.cs
++++ b/CTMOleClient/DllImport.cs
+@@ -124,10 +124,6 @@ namespace CTMOnCSharp
+         public static extern CTMDispenseCashResult DispenseCash([MarshalAs(UnmanagedType.U4)] int amountToDispense);
+ 
+ 
+-
+-        [DllImport("libctmclient-0.dll", EntryPoint = "ctm_begin_cash_management_transaction", CallingConvention = CallingConvention.Cdecl)]
+-        public static extern CTMBeginTransactionResult BeginCashManagementTransaction([MarshalAs(UnmanagedType.LPStr)] string userId, [MarshalAs(UnmanagedType.LPStr)] string cashierId);
+-
+         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_free_string", CallingConvention = CallingConvention.Cdecl)]
+         public static extern void FreeString(IntPtr ptr);
+ 
+@@ -160,9 +156,7 @@ namespace CTMOnCSharp
+         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_get_cm_receipt_data", CallingConvention = CallingConvention.Cdecl)]
+         public static extern CTMGetCMReceiptDataResult GetCMReceiptData();
+ 
+-        [DllImport("libctmclient-0.dll", EntryPoint = "ctm_begin_cash_management_transaction", CallingConvention = CallingConvention.Cdecl)]
+-        public static extern CTMBeginTransactionResult BeginCashManagementTransaction([MarshalAs(UnmanagedType.LPStr)] string userId, [MarshalAs(UnmanagedType.LPStr)] string cashierId, [MarshalAs(UnmanagedType.LPStr)] string transactionId);
+-
++    
+         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_add_cash_unit_to_cash_unit_set", CallingConvention = CallingConvention.Cdecl)]
+         public static extern void AddCashUnitToCashUnitSet([MarshalAs(UnmanagedType.Struct)] ref CTMCashUnitSet cashUnitSet, CTMCashType cashType, [MarshalAs(UnmanagedType.U4)] int denomination, [MarshalAs(UnmanagedType.U4)] int count, [MarshalAs(UnmanagedType.LPStr)] string curencyCode);
+ 
+@@ -249,14 +243,14 @@ namespace CTMOnCSharp
+ 
+ 
+ 
+-
+-
+         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_begin_cash_management_transaction", CallingConvention = CallingConvention.Cdecl)]
+-        public static extern CTMBeginTransactionError BeginCashManagementTransaction([MarshalAs(UnmanagedType.LPStr)] string userId, [MarshalAs(UnmanagedType.LPStr)] string cashierId, out IntPtr transactionIdPtr);
++        public static extern CTMBeginTransactionResult BeginCashManagementTransaction([MarshalAs(UnmanagedType.LPStr)] string userId, [MarshalAs(UnmanagedType.LPStr)] string cashierId, [MarshalAs(UnmanagedType.LPStr)] string transactionId);
+ 
+         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_transaction", CallingConvention = CallingConvention.Cdecl)]
+         public static extern CTMEndTransactionResult EndCashManagementTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
+-     
++
++
++
+       
+     }
+ }
+diff --git a/CTMOleClient/Enum.cs b/CTMOleClient/Enum.cs
+index 2843ec9..a926297 100644
+--- a/CTMOleClient/Enum.cs
++++ b/CTMOleClient/Enum.cs
+@@ -93,6 +93,7 @@ namespace CTMOnCSharp
+         CTM_BEGIN_TRX_ERROR_UNHANDLED_EXCEPTION = 99
+     }
+ 
++  
+     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+     [ComVisible(true)]
+     public struct CTMBeginTransactionResult
+@@ -102,8 +103,16 @@ namespace CTMOnCSharp
+         {
+             get { return Marshal.PtrToStringAnsi(intPtr); }
+         }
++
+         public CTMBeginTransactionError error;
+-    }
++    };
++
++
++
++
++
++
++
+ 
+     [ComVisible(true)]
+     public enum CTMEndTransactionResult
