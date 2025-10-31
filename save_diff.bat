@@ -29,4 +29,8 @@ echo Разница успешно сохранена в файл: %FILENAME%
 echo ----------------------------------------------------
 
 endlocal
-pause
+echo.
+echo.
+echo.
+echo.
+echo.

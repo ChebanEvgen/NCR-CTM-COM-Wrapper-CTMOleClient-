@@ -391,47 +391,37 @@ namespace CTMOleClient
         public ArrayList GetDispensableCashCounts()
         {
             LogToFile("GetDispensableCashCounts: called.");
-            var list = new ArrayList();
             try
             {
-                CTMGetCashCountsResult countsResult = CtmCClient.GetDispensableCashCounts();
-                if (countsResult.error != CTMGetCashCountsError.CTM_GET_CASH_COUNTS_SUCCESS)
+                _lastError = "";
+                var result = CtmCClient.GetDispensableCashCounts();
+                if (result.error == CTMGetCashCountsError.CTM_GET_CASH_COUNTS_SUCCESS)
                 {
-                    _lastError = countsResult.error.ToString();
-                    LogToFile($"GetDispensableCashCounts: native error {countsResult.error}.");
+                    var list = new ArrayList();
+                    for (int i = 0; i < result.cashUnitSet.count; i++)
+                    {
+                        var unit = new CTMCashUnit();
+                        IntPtr ptr = IntPtr.Add(result.cashUnitSet.intPtr, i * Marshal.SizeOf(typeof(CTMCashUnit)));
+                        unit = (CTMCashUnit)Marshal.PtrToStructure(ptr, typeof(CTMCashUnit));
+                        var info = new CashUnitInfo();
+                        info.FromUnmanaged(unit);
+                        list.Add(info);
+                    }
+                    LogToFile($"GetDispensableCashCounts: returned {list.Count} items.");
                     return list;
                 }
-
-                var cashUnitSet = countsResult.cashUnitSet;
-                IntPtr ptr = cashUnitSet.intPtr;
-                int size = Marshal.SizeOf(typeof(CTMCashUnit));
-
-                for (int i = 0; i < cashUnitSet.count; i++)
+                else
                 {
-                    IntPtr itemPtr = IntPtr.Add(ptr, i * size);
-                    CTMCashUnit unit = (CTMCashUnit)Marshal.PtrToStructure(itemPtr, typeof(CTMCashUnit));
-
-                    var info = new CashUnitInfo
-                    {
-                        Denomination = unit.denomination,
-                        Count = unit.count,
-                        Type = (int)unit.type,  // 0 = COIN, 1 = NOTE
-                        CurrencyCode = unit.currencyCode
-                    };
-                    list.Add(info);
+                    _lastError = result.error.ToString();
+                    LogToFile($"GetDispensableCashCounts: error {result.error} — return empty list.");
+                    return new ArrayList();   
                 }
-
-                CtmCClient.FreeCashUnitSetContents(ref cashUnitSet);
-
-                _lastError = "OK";
-                LogToFile($"GetDispensableCashCounts: returned {list.Count} items.");
-                return list;
             }
             catch (Exception ex)
             {
                 _lastError = ex.Message;
-                LogToFile($"GetDispensableCashCounts: exception {ex.Message}.");
-                return list;
+                LogToFile($"GetDispensableCashCounts: EXCEPTION {ex.Message}");
+                return new ArrayList();   
             }
         }
 
@@ -441,11 +431,12 @@ namespace CTMOleClient
             var list = new ArrayList();
             try
             {
+                _lastError = "";
                 CTMGetCashCountsResult countsResult = CtmCClient.GetNonDispensableCashCounts();
                 if (countsResult.error != CTMGetCashCountsError.CTM_GET_CASH_COUNTS_SUCCESS)
                 {
                     _lastError = countsResult.error.ToString();
-                    LogToFile($"GetNonDispensableCashCounts: native error {countsResult.error}.");
+                    LogToFile($"GetNonDispensableCashCounts: error {countsResult.error} — return empty list.");
                     return list;
                 }
 
@@ -463,12 +454,23 @@ namespace CTMOleClient
                         Denomination = unit.denomination,
                         Count = unit.count,
                         Type = (int)unit.type,  // 0 = COIN, 1 = NOTE
-                        CurrencyCode = unit.currencyCode
+                        CurrencyCode = unit.currencyCode ?? string.Empty
                     };
                     list.Add(info);
                 }
 
-                CtmCClient.FreeCashUnitSetContents(ref cashUnitSet);
+                try
+                {
+                    if (cashUnitSet.intPtr != IntPtr.Zero)
+                    {
+                        CtmCClient.FreeCashUnitSetContents(ref cashUnitSet);
+                        LogToFile("GetNonDispensableCashCounts: memory freed.");
+                    }
+                }
+                catch (Exception freeEx)
+                {
+                    LogToFile($"GetNonDispensableCashCounts: free error {freeEx.Message} — memory may leak.");
+                }
 
                 _lastError = "OK";
                 LogToFile($"GetNonDispensableCashCounts: returned {list.Count} items.");
@@ -477,7 +479,7 @@ namespace CTMOleClient
             catch (Exception ex)
             {
                 _lastError = ex.Message;
-                LogToFile($"GetNonDispensableCashCounts: exception {ex.Message}.");
+                LogToFile($"GetNonDispensableCashCounts: EXCEPTION {ex.Message}");
                 return list;
             }
         }

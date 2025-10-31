@@ -36,5 +36,8 @@ if errorlevel 1 (
 
 echo.
 echo [DONE] COMPONENT SUCCESSFULLY REGISTERED.
-pause
+echo.
+echo.
+echo.
+echo.
 endlocal
