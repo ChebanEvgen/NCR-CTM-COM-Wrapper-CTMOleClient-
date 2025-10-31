@@ -12,6 +12,8 @@ using System.Threading;
 
 namespace CTMOleClient
 {
+
+
     [ComVisible(true)]
     [Guid("D36A29C9-0B48-4F39-BB51-8F3B738AA111")]
     [InterfaceType(ComInterfaceType.InterfaceIsDual)]
@@ -40,8 +42,9 @@ namespace CTMOleClient
         bool BeginCashManagementTransaction(string userId, string cashierId, out string txnId);
         bool EndCashManagementTransaction(string txnId);
         CTMAcceptCashRequestResult BeginRefill(int targetAmount = -1);
-        CTMEndRefillResult EndRefill(out int totalAmount);
+        bool EndRefill();
     }
+
 
     [ComVisible(true)]
     [Guid("5C6E18AF-3B0F-4639-90B0-B04D1B9FF999")]
@@ -785,6 +788,7 @@ namespace CTMOleClient
                 return false;
             }
         }
+       
         public bool EndCashManagementTransaction(string txnId)
         {
             LogToFile($"EndCashManagementTransaction: txnId='{txnId ?? _cmTxnId}'");
@@ -828,6 +832,7 @@ namespace CTMOleClient
                 return false;
             }
         }
+       
         public CTMAcceptCashRequestResult BeginRefill(int targetAmount = -1)
         {
             LogToFile($"BeginRefill: targetAmount={targetAmount} (CM txn: {_cmTxnId})");
@@ -853,32 +858,34 @@ namespace CTMOleClient
             }
         }
 
-        public CTMEndRefillResult EndRefill(out int totalAmount)
+        public bool EndRefill()
         {
-            totalAmount = 0;
             LogToFile("EndRefill: called (disables acceptors)");
             try
             {
                 _lastError = "";
-                var result = CtmCClient.EndRefill();
-                totalAmount = result.totalAmount;  // From logs: total inserted 1007
-                if (result.error == CTMAcceptCashRequestResult.CTM_ACCEPT_CASH_SUCCESS)
+                CTMStopAcceptingCashResult result = CtmCClient.StopAcceptingCash();
+                if (result == CTMStopAcceptingCashResult.CTM_STOP_ACCEPTING_CASH_SUCCESS)
                 {
-                    LogToFile($"Refill ended: total={totalAmount}");
-                    return result;
+                    LogToFile($"✓ CM Refill ended");
+                    return true;
                 }
-                _lastError = result.error.ToString();
-                LogToFile($"EndRefill failed: {result.error}");
-                return result;
+                else
+                {
+                    _lastError = result.ToString();
+                    LogToFile($"✗ EndRefill error: {result}");
+                    return false;
+                }
             }
             catch (Exception ex)
             {
-                _lastError = ex.Message;
-                LogToFile($"Exception in EndRefill: {ex}");
-                return new CTMEndRefillResult { error = CTMAcceptCashRequestResult.CTM_ACCEPT_CASH_ERROR_UNHANDLED_EXCEPTION };
+                _lastError = $"EX: {ex.Message}";
+                LogToFile(_lastError + "\n" + ex.StackTrace);
+                return false;
             }
+
         }
 
-       
+
     }
 }

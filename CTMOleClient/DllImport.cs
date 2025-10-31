@@ -132,8 +132,7 @@ namespace CTMOnCSharp
         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_begin_refill", CallingConvention = CallingConvention.Cdecl)]
         public static extern CTMAcceptCashRequestResult BeginRefill(int targetAmount = -1); 
 
-        [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_refill", CallingConvention = CallingConvention.Cdecl)]
-        public static extern CTMEndRefillResult EndRefill();  
+
 
         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_get_dispensable_capacities", CallingConvention = CallingConvention.Cdecl)]
         public static extern CTMGetCapacitiesResult GetDispensableCapacities();
