@@ -5,7 +5,7 @@
 
 This repository contains a C# COM (OLE) wrapper library for integrating NCR SelfServ™ Cash Tender Module (CTM) with 1C:Enterprise 8.3 (ordinary forms). It provides a managed interface to the native `libctmclient-0.dll` for cash management operations in Point-of-Sale (POS) systems, such as accepting/dispensing cash, transaction handling, and device status monitoring.
 
-The wrapper is designed for seamless use in 1C 8.3 environments, enabling cash machine control without direct P/Invoke complexity. It's based on the [NCR SelfServ Cash Tender POS Integration SDK User Guide (Release 1.2)](https://github.com/ChebanEvgen/NCR-CTM-COM-Wrapper-CTMOleClient-/blob/main/docs/CTM_POS_Integration.pdf).
+The wrapper is designed for seamless use in 1C 8.3 environments, enabling cash machine control without direct P/Invoke complexity. It's based on the [NCR SelfServ™ Cash Tender POS Integration SDK User Guide (Release 1.2, B005-0000-2151 Issue E)](https://github.com/ChebanEvgen/NCR-CTM-COM-Wrapper-CTMOleClient-/blob/main/docs/CTM_POS_Integration.pdf).
 
 ## Features
 
@@ -75,20 +75,133 @@ The wrapper is designed for seamless use in 1C 8.3 environments, enabling cash m
 ### In 1C 8.3 (Ordinary Forms)
 - Connect: `CTM = Новый("AddIn.CTMOleClient.CTMWrapper");`.
 - Initialize: `CTM.Initialize("Client_XXX", "100.72.2.50", "3636");`.
-- Example Refill Flow:
-  ```1c
-  Если CTM.BeginCashManagementTransaction("user456", "cashier789", ТранзакцияID) Тогда
-      Результат = CTM.BeginRefill(-1);  // -1 = unlimited
-      Если Результат = 0 Тогда  // Success
-          Пока Истина Цикл
-              // Wait for OnCashAccept event or timeout
-          КонецЦикла;
-          Успех = CTM.EndRefill();
-      КонецЕсли;
-      CTM.EndCashManagementTransaction(ТранзакцияID);
-  КонецЕсли;
-  ```
-- Handle Events: Use 1C form events like `OnCashAccept(Amount, AmountDue, Count, Currency)`.
+- Example Refill Flow (working code from tests):
+
+```1c
+Перем CTM;     
+Перем ClientName;   
+Перем ТранзакцияCM;
+
+Функция Копейки(суммаВКопейках)
+    Возврат суммаВКопейках/100;
+КонецФункции
+
+Процедура ПриОткрытии()
+    Host = "100.72.2.50";
+    Port = "3636";
+    ClientName = "Client_" + Лев(Новый УникальныйИдентификатор,8);  
+    
+    CTM = Новый COMОбъект("CTMOleClient.CTMWrapper");  
+    CTM.SetConnection(ЭтаФорма); 
+    CTM.SetLogPath("C:\Temp\CTM_"+Новый УникальныйИдентификатор()+".log");
+    
+    Если CTM.Initialize(ClientName,Host,Port) Тогда
+        CTM.AdviseEvents();  
+        Сообщить("Init CTM: " + CTM.GetLogPath());
+    Иначе
+        Сообщить("Init CTM failed: " + CTM.GetLastError());
+    КонецЕсли;    
+КонецПроцедуры   
+
+Процедура OnCashAccept(Принято, Остаток, Номинал, Валюта) Экспорт
+    Сообщить(">>> Колбек CTM: Получено: " + Копейки(Принято) + " (" + Копейки(Номинал) + " " + Валюта + "), Остаток: " + Копейки(Остаток));
+КонецПроцедуры
+
+Процедура OnDeviceError(ИнфоОшибки) Экспорт
+    Сообщить(">>> Колбек CTM Ошибка: " + ИнфоОшибки);
+КонецПроцедуры
+
+Процедура OnCashAcceptComplete() Экспорт
+    Сообщить(">>> Колбек CTM: Приём завершён");
+КонецПроцедуры
+
+Процедура OnDeviceStatus(ИнфоСтатуса) Экспорт
+    Сообщить(">>> Колбек CTM Статус: " + ИнфоСтатуса);
+КонецПроцедуры
+
+Процедура OnSocketClosed(ИнфоСоединения) Экспорт  
+    Сообщить(">>> Колбек CTM: Соединение закрыто - " + ИнфоСоединения);  
+КонецПроцедуры
+
+Процедура OnChangeContext(ИнфоКонтекста) Экспорт  
+    Сообщить(">>> Колбек CTM: Смена контекста - " + ИнфоКонтекста);  
+КонецПроцедуры
+
+Процедура OnAuthentication(ИмяПользователя, ЭтоHCashier) Экспорт  
+    Сообщить(">>> Колбек CTM: Аутентификация - Пользователь: " + ИмяПользователя + ", HCashier: " + ЭтоHCashier);  
+КонецПроцедуры
+
+Процедура OnCMClosed(ИнфоЗакрытия) Экспорт  
+    Сообщить(">>> Колбек CTM: CM-приложение закрыто - " + ИнфоЗакрытия);  
+КонецПроцедуры
+
+Процедура OnTransactionEnd(TxnId, Status) Экспорт
+    Сообщить(">>> Колбек CTM: Транзакция " + TxnId + " завершена со статусом: " + Status);
+КонецПроцедуры
+
+Процедура НачатьCMТранзакциюНажатие(Команда)
+    UserId = "456";
+    CashierId = "789";
+    ТранзакцияCM_Нов = "";
+    
+    Если CTM.BeginCashManagementTransaction(UserId, CashierId, ТранзакцияCM_Нов) Тогда
+        Сообщить("✓ Транзакция CM начата. ID = " + ТранзакцияCM_Нов );   
+        ТранзакцияCM = ТранзакцияCM_Нов;
+    Иначе
+        Ошибка = CTM.GetLastError();
+        Сообщить("✗ (Начало транзакции) Ошибка: " + Ошибка);
+    КонецЕсли;
+КонецПроцедуры
+
+Процедура НачатьПополнениеНажатие(Элемент)  
+    Если ПустаяСтрока(ТранзакцияCM) Тогда
+        Сообщить("Сначала начните CM-транзакцию!");
+        Возврат;
+    КонецЕсли;
+    
+    Результат = CTM.BeginRefill(-1); 
+    Если Результат = 0 Тогда 
+        Сообщить("Пополнение начато: акцепторы включены.");
+        СуммаПополнения = 0;  
+    Иначе
+        Сообщить("Ошибка начала пополнения: " + Результат);
+    КонецЕсли;     
+КонецПроцедуры
+
+Процедура ЗавершитьПополнениеНажатие(Элемент)     
+    Если CTM.EndRefill() Тогда 
+        Сообщить("Пополнение завершено. Итого: " );
+        //СуммаПополнения = Результат.totalAmount;
+    Иначе
+        Сообщить("Ошибка завершения: " + CTM.GetLastError());
+    КонецЕсли; 
+КонецПроцедуры
+
+Процедура ЗавершитьCMТранзакциюНажатие(Элемент)    
+    Если ПустаяСтрока(ТранзакцияCM) Тогда
+        Сообщить("✗ Нет активной CM-транзакции!");
+        Возврат;
+    КонецЕсли;
+    
+    Если CTM.EndCashManagementTransaction(ТранзакцияCM) Тогда
+        Сообщить("✓ CM-транзакция завершена. ACO-отчёт сгенерирован.");
+        ТранзакцияCM = "";
+    Иначе
+        Сообщить("✗ Ошибка завершения CM: " + CTM.GetLastError());
+    КонецЕсли;
+КонецПроцедуры
+
+Процедура ОтключитьИЗакрытьНажатие(Элемент)  
+    Если CTM <> Неопределено Тогда
+        CTM.UnadviseEvents();
+        CTM.Uninitialize();
+        CTM = Неопределено;    
+        ЗавершитьРаботуСистемы(Ложь);
+    КонецЕсли;  
+КонецПроцедуры
+```
+
+- Event Handling: Use 1C form events like `OnCashAccept(Amount, AmountDue, Count, Currency)`.
 
 See `examples/1C_Example.epf` for a sample 1C external processing file.
 
@@ -106,10 +219,7 @@ For troubleshooting:
 - Check `CTM.GetLastError()` after calls.
 - Logs: Set via `CTM.SetLogPath("C:\Temp\CTM.log")`.
 
-## Known Issues
 
-- Repeated `GetNonDispensableCashCounts()` after refill may return empty (due to NCR emulator "No Loader" config) — handled gracefully.
-- Ensure `SynchronizationContext` for UI events in 1C forms.
 
 ## Contributing
 
@@ -121,7 +231,7 @@ MIT License — see [LICENSE](LICENSE) file.
 
 ## Author & Contact
 
-- **Evgen Cheban** (ChebanEvgen) — Developer.
+- **Evgen Cheban (ChebanEvgen)** — Developer.
 - Issues/PRs: GitHub repo.
 - Based on NCR SDK docs (B005-0000-2151 Issue E, 2008–2015).
 
