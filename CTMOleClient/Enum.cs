@@ -93,12 +93,16 @@ namespace CTMOnCSharp
         CTM_BEGIN_TRX_ERROR_UNHANDLED_EXCEPTION = 99
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     [ComVisible(true)]
     public struct CTMBeginTransactionResult
     {
+        public IntPtr intPtr;
+        public string transactionId
+        {
+            get { return Marshal.PtrToStringAnsi(intPtr); }
+        }
         public CTMBeginTransactionError error;
-        public IntPtr transactionId;  // char* из C
     }
 
     [ComVisible(true)]

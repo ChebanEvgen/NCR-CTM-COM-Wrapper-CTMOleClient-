@@ -92,19 +92,16 @@ namespace CTMOnCSharp
         public static extern CTMGetConfigResult GetConfig();
 
 
-
-
-        // Для BeginCustomerTransaction (POS customer start)
         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_begin_customer_transaction", CallingConvention = CallingConvention.Cdecl)]
         public static extern CTMBeginTransactionResult BeginCustomerTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
 
 
         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_transaction", CallingConvention = CallingConvention.Cdecl)]
-        public static extern CTMBeginTransactionError EndCustomerTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
+        public static extern CTMEndTransactionResult EndCustomerTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);  // Было CTMBeginTransactionError — смени!
+
+  
 
 
-        [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_transaction", CallingConvention = CallingConvention.Cdecl)]
-        public static extern CTMEndTransactionResult EndTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
 
 
 
@@ -135,9 +132,7 @@ namespace CTMOnCSharp
         public static extern void FreeString(IntPtr ptr);
 
 
-       // [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_cash_management_transaction", CallingConvention = CallingConvention.Cdecl)]
-       // public static extern CTMEndTransactionResult EndCashManagementTransaction([MarshalAs(UnmanagedType.LPStr)] string txnId);
-
+       
         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_begin_refill", CallingConvention = CallingConvention.Cdecl)]
         public static extern CTMAcceptCashRequestResult BeginRefill(int targetAmount = -1); 
 
@@ -256,12 +251,12 @@ namespace CTMOnCSharp
 
 
 
-
-        [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_transaction", CallingConvention = CallingConvention.Cdecl)]
-        public static extern CTMBeginTransactionError EndCashManagementTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
-
         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_begin_cash_management_transaction", CallingConvention = CallingConvention.Cdecl)]
         public static extern CTMBeginTransactionError BeginCashManagementTransaction([MarshalAs(UnmanagedType.LPStr)] string userId, [MarshalAs(UnmanagedType.LPStr)] string cashierId, out IntPtr transactionIdPtr);
 
+        [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_transaction", CallingConvention = CallingConvention.Cdecl)]
+        public static extern CTMEndTransactionResult EndCashManagementTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
+     
+      
     }
 }

@@ -44,22 +44,25 @@ namespace CTMOnCSharp
     };
 
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     [ComVisible(true)]
     public struct BeginCustomerTransactionResult
     {
+        public IntPtr intPtr;
+        public string transactionId
+        {
+            get { return Marshal.PtrToStringAnsi(intPtr); }
+        }
         public CTMBeginTransactionError error;
-        [MarshalAs(UnmanagedType.LPStr)]
-        public IntPtr transactionId;
     }
 
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     [ComVisible(true)]
     public struct CTMDispenseCashResult
     {
-        [MarshalAs(UnmanagedType.I4)]
-        public int amountDispensed;
+        [MarshalAs(UnmanagedType.U4)]
+        public UInt32 amountDispensed;
 
         public CTMCashUnitSet cashUnitSet;
 

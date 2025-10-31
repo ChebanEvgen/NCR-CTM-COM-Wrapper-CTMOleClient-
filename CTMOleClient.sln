@@ -5,6 +5,8 @@ VisualStudioVersion = 17.8.34511.84
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CTMOleClient", "CTMOleClient\CTMOleClient.csproj", "{372F97D4-45CC-4E27-862C-F912E28E4EED}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CTMOleClient.Tests", "CTMOleClient.Tests\CTMOleClient.Tests.csproj", "{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,14 @@ Global
 		{372F97D4-45CC-4E27-862C-F912E28E4EED}.Release|Any CPU.Build.0 = Release|Any CPU
 		{372F97D4-45CC-4E27-862C-F912E28E4EED}.Release|x86.ActiveCfg = Release|x86
 		{372F97D4-45CC-4E27-862C-F912E28E4EED}.Release|x86.Build.0 = Release|x86
+		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Debug|x86.Build.0 = Debug|Any CPU
+		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Release|x86.ActiveCfg = Release|Any CPU
+		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

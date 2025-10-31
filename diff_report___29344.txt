@@ -1,0 +1,704 @@
+diff --git a/CTMOleClient.sln b/CTMOleClient.sln
+index 1027686..169501f 100644
+--- a/CTMOleClient.sln
++++ b/CTMOleClient.sln
+@@ -5,6 +5,8 @@ VisualStudioVersion = 17.8.34511.84
+ MinimumVisualStudioVersion = 10.0.40219.1
+ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CTMOleClient", "CTMOleClient\CTMOleClient.csproj", "{372F97D4-45CC-4E27-862C-F912E28E4EED}"
+ EndProject
++Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CTMOleClient.Tests", "CTMOleClient.Tests\CTMOleClient.Tests.csproj", "{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}"
++EndProject
+ Global
+ 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+ 		Debug|Any CPU = Debug|Any CPU
+@@ -21,6 +23,14 @@ Global
+ 		{372F97D4-45CC-4E27-862C-F912E28E4EED}.Release|Any CPU.Build.0 = Release|Any CPU
+ 		{372F97D4-45CC-4E27-862C-F912E28E4EED}.Release|x86.ActiveCfg = Release|x86
+ 		{372F97D4-45CC-4E27-862C-F912E28E4EED}.Release|x86.Build.0 = Release|x86
++		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
++		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Debug|Any CPU.Build.0 = Debug|Any CPU
++		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Debug|x86.ActiveCfg = Debug|Any CPU
++		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Debug|x86.Build.0 = Debug|Any CPU
++		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Release|Any CPU.ActiveCfg = Release|Any CPU
++		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Release|Any CPU.Build.0 = Release|Any CPU
++		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Release|x86.ActiveCfg = Release|Any CPU
++		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Release|x86.Build.0 = Release|Any CPU
+ 	EndGlobalSection
+ 	GlobalSection(SolutionProperties) = preSolution
+ 		HideSolutionNode = FALSE
+diff --git a/CTMOleClient/CTMWrapper.cs b/CTMOleClient/CTMWrapper.cs
+index 4ce9ea0..11f8ba9 100644
+--- a/CTMOleClient/CTMWrapper.cs
++++ b/CTMOleClient/CTMWrapper.cs
+@@ -2,12 +2,14 @@
+ using System;
+ using System.Collections;
+ using System.Collections.Generic;
++using System.Globalization;
+ using System.IO;
+ using System.Reflection;
+ using System.Runtime.InteropServices;
+ using System.Text;
+ using System.Threading;
+ 
++
+ namespace CTMOleClient
+ {
+     [ComVisible(true)]
+@@ -22,6 +24,8 @@ namespace CTMOleClient
+         bool Reinitialize(string clientId, string overrideHost = null, string overridePort = null);
+         string GetLastError();
+         string GetConfig(string key);
++        string GetTxnId();
++        string GetCustomerTxnId();
+         bool BeginCustomerTransaction(string txnId);
+         bool EndCustomerTransaction(string txnId);
+         bool AcceptCash(int amount);
+@@ -48,6 +52,10 @@ namespace CTMOleClient
+         private string _logPath = null;
+         private string _cmTxnId = string.Empty;
+         private string _customerTxnId = string.Empty;
++        private string _lastError = string.Empty;
++        private bool _eventsEnabled = false;
++        private string _clientId = "";
++
+ 
+         public CTMWrapper() : base() {}
+ 
+@@ -59,12 +67,13 @@ namespace CTMOleClient
+         private CtmCClient.OnChangeContextCallBack _changeContextCallback;
+         private CtmCClient.OnAuthenticationCallBack _authenticationCallback;
+         private CtmCClient.OnCMClosedCallBack _cmClosedCallback;
+-
+-        private string _lastError = string.Empty;
+-        private string _currentTransactionId = string.Empty;
+-        private bool _eventsEnabled = false;
+         private SynchronizationContext _uiContext;
+ 
++        private Dictionary<CTMOnCSharp.CTMDeviceType, int> _deviceStatuses = new Dictionary<CTMOnCSharp.CTMDeviceType, int>();
++
++
++
++
+         public override void Init(object pConnection)
+         {
+             LogToFile("Init: called.");
+@@ -94,6 +103,24 @@ namespace CTMOleClient
+             return _lastError;
+         }
+ 
++        public string GetCurrentClientId()
++        {
++            LogToFile($"GetCurrentClientId: returning '{_clientId}'.");
++            return _clientId;
++        }
++
++        public string GetTxnId()
++        {
++            LogToFile($"GetCmTxnId: returning '{_cmTxnId}'.");
++            return _cmTxnId;
++        }
++
++        public string GetCustomerTxnId()
++        {
++            LogToFile($"GetCustomerTxnId: returning '{_customerTxnId}'.");
++            return _customerTxnId;
++        }
++
+         public bool Initialize(string clientId, string overrideHost = null, string overridePort = null)
+         {
+             LogToFile($"Initialize: called with clientId='{clientId}', overrideHost='{overrideHost ?? "null"}', overridePort='{overridePort ?? "null"}'.");            try
+@@ -109,7 +136,7 @@ namespace CTMOleClient
+                 {
+                     AddCallbacks();
+                     _lastError = "OK";
+-                    _currentTransactionId = string.Empty;
++                    _clientId = clientId;
+                     LogToFile($"Initialize: SUCCESS (host: {serviceLocation}, port: {portNumber}).");
+                     return true;
+                 }
+@@ -132,7 +159,6 @@ namespace CTMOleClient
+             {
+                 UnadviseEvents();  
+                 CtmCClient.Uninitialize();  
+-                _currentTransactionId = string.Empty;
+                 _lastError = "Uninitialized";
+                 _uiContext = null;
+ 
+@@ -190,45 +216,68 @@ namespace CTMOleClient
+                 return string.Empty;
+             }
+         }
++        
++        public object GetFullConfig()
++        {
++            LogToFile("GetFullConfig: called.");
++            try
++            {
++                _lastError = "";
++                var configResult = CtmCClient.GetConfig();
++                LogToFile($"GetFullConfig: received config with {configResult.config.count} entries.");
++
++                if (configResult.config.count == 0)
++                {
++                    _lastError = "Config empty";
++                    LogToFile("GetFullConfig: Config empty.");
++                    return new ConfigInfo(configResult.config);
++                }
++
++                var configInfo = new ConfigInfo(configResult.config);
++                LogToFile("GetFullConfig: ConfigInfo constructed.");
++
++                _lastError = "OK";
++                return configInfo;
++            }
++            catch (Exception ex)
++            {
++                _lastError = ex.Message;
++                LogToFile($"GetFullConfig: EXCEPTION {ex.Message}.");
++                return new ConfigInfo(new CTMConfiguration { count = 0 });
++            }
++        }
++
+ 
+         public bool BeginCustomerTransaction(string txnId)
+         {
+-            LogToFile($"BeginCustomerTransaction: txnId='{txnId}'");
++            LogToFile($"BeginCustomerTransaction: txnId='{txnId}' (client: {_clientId ?? "unknown"})");
+             try
+             {
+                 if (string.IsNullOrEmpty(txnId))
+-                    txnId = $"TXN_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N.Substring(0,8)}";
+-
+-                _lastError = "";
+-                var result = CtmCClient.BeginCustomerTransaction(txnId);
+-                LogToFile($"BeginCustomer raw result: error={result.error}, txnPtr={result.transactionId.ToInt64():X}");
+-
+-                // ENHANCED HACK for NCR emulators: if ptr is NULL treat as success (server echoes input ID) and use the input ID
+-                if (result.transactionId == IntPtr.Zero)
+                 {
+-                    _customerTxnId = txnId;  // Fallback: server echoed input ID, ignore garbage error
+-                    LogToFile($"✓ ENHANCED HACK: ptr NULL (error garbage {result.error}), but server success — using input ID: {_customerTxnId}");
+-                    return true;
++                    _lastError = "Invalid txnId";
++                    LogToFile("✗ Invalid txnId");
++                    return false;
+                 }
+ 
+-                // Normal case: ptr is valid
+-                string txnFromPtr = Marshal.PtrToStringAnsi(result.transactionId);
++                _lastError = "";
++                var result = CtmCClient.BeginCustomerTransaction(txnId);  // Return struct
++                LogToFile($"BeginCustomer raw result: error={result.error}, intPtr={result.intPtr.ToInt64():X}, txnId='{result.transactionId}'");
+                 if (result.error == CTMBeginTransactionError.CTM_BEGIN_TRX_SUCCESS)
+                 {
+-                    _customerTxnId = txnFromPtr ?? txnId;
+-                    // Free DLL-allocated memory (important!)
+-                    Marshal.FreeHGlobal(result.transactionId);
+-                    LogToFile($"✓ Customer Transaction started: txnId={_customerTxnId}");
++                    string actualId = !string.IsNullOrEmpty(result.transactionId) ? result.transactionId : txnId;
++                    _customerTxnId = actualId;
++                    _lastError = "OK";
++                    LogToFile($"✓ Customer Transaction started: txnId={actualId}");
+                     return true;
+                 }
+-
+-                // On error: free ptr if valid
+-                if (result.transactionId != IntPtr.Zero)
+-                    Marshal.FreeHGlobal(result.transactionId);
+-
+-                _lastError = result.error.ToString();
+-                LogToFile($"✗ Customer Transaction failed: {result.error}");
+-                return false;
++                else
++                {
++                    _lastError = result.error.ToString();
++                    LogToFile($"✗ BeginCustomerTransaction failed: {result.error}");
++                    if (result.intPtr != IntPtr.Zero) Marshal.FreeHGlobal(result.intPtr);
++                    return false;
++                }
+             }
+             catch (Exception ex)
+             {
+@@ -238,6 +287,7 @@ namespace CTMOleClient
+             }
+         }
+ 
++
+         public bool EndCustomerTransaction(string txnId)
+         {
+             LogToFile($"EndCustomerTransaction: txnId='{txnId ?? _customerTxnId}'");
+@@ -246,28 +296,26 @@ namespace CTMOleClient
+                 string actualTxnId = txnId ?? _customerTxnId;
+                 if (string.IsNullOrEmpty(actualTxnId))
+                 {
+-                    _lastError = "No transaction ID";
+-                    LogToFile("✗ No txnId for End");
++                    _lastError = "No active customer transaction ID";
++                    LogToFile("✗ No customer txnId for End — skip DLL call");
+                     return false;
+                 }
+ 
+                 _lastError = "";
+-                var result = CtmCClient.EndCustomerTransaction(actualTxnId);  // result — enum/int (success=0)
+-                LogToFile($"EndCustomer raw result: error={result}");
++                var result = CtmCClient.EndCustomerTransaction(actualTxnId);  // Вызов DLL
++                LogToFile($"EndCustomer raw result: {result} (int: {(int)result})");
++
++                bool success = (result == CTMEndTransactionResult.CTM_END_TRX_SUCCESS) ;  
++
++                _lastError = success ? "OK" : result.ToString(); 
++                _customerTxnId = string.Empty;  
+ 
+-                // HACK for emulators: if garbage error > 1,000,000 treat as OK (server success)
+-                if ((int)result != 0 && (int)result < 1000000)
++                if (!success)
+                 {
+-                    LogToFile($"✗ End raw error: {result} (real error)");
+-                    _lastError = result.ToString();
++                    LogToFile($"✗ EndCustomer real error: {result}");
+                     return false;
+                 }
+ 
+-                _customerTxnId = "";  // Reset ID
+-                // Invoke OnTransactionEnd event
+-                if (_eventsEnabled && _uiContext != null)
+-                    _uiContext.Post(_ => InvokeOneCEvent("OnTransactionEnd", new object[] { actualTxnId, "SUCCESS" }), null);
+-
+                 LogToFile($"✓ Customer Transaction ended: txnId={actualTxnId}");
+                 return true;
+             }
+@@ -278,6 +326,8 @@ namespace CTMOleClient
+                 return false;
+             }
+         }
++        
++
+         public bool AcceptCash(int amount)
+         {
+             LogToFile($"AcceptCash: requested amount={amount}.");
+@@ -299,66 +349,40 @@ namespace CTMOleClient
+         public object DispenseCash(int amount)
+         {
+             LogToFile($"DispenseCash: requested amount={amount}.");
+-            try
+-            {
+-                _lastError = "";
+-                var result = CtmCClient.DispenseCash(amount);
+-                LogToFile($"DispenseCash raw result: error={result.error}, amountDispensed={result.amountDispensed}");
+ 
+-                var dispenseResult = new DispenseCashResult { Success = false, AmountDispensed = (int)result.amountDispensed };
++            CTMDispenseCashResult result = CtmCClient.DispenseCash(amount);
++            LogToFile($"DispenseCash raw result: error={result.error}, amountDispensed={result.amountDispensed}");
+ 
+-                // HACK for emulators: if garbage error > 1,000,000 but amount is OK, treat as success
+-                bool isGarbageError = (int)result.error > 1000000;
+-                if (result.error == CTMDispenseCashError.CTM_DISPENSE_CASH_SUCCESS || isGarbageError)
+-                {
+-                    dispenseResult.Success = true;
+-                    LogToFile($"✓ HACK: {(isGarbageError ? "garbage error" : "success")} — dispensed {result.amountDispensed}");
+-
+-                    // Parse units from cashUnitSet (if ptr is valid)
+-                    if (result.cashUnitSet.intPtr != IntPtr.Zero && result.cashUnitSet.count > 0)
+-                    {
+-                        int unitSize = Marshal.SizeOf(typeof(CTMCashUnit));
+-                        for (int i = 0; i < result.cashUnitSet.count; i++)
+-                        {
+-                            IntPtr unitPtr = IntPtr.Add(result.cashUnitSet.intPtr, i * unitSize);
+-                            var unit = (CTMCashUnit)Marshal.PtrToStructure(unitPtr, typeof(CTMCashUnit));
+-                            var cashUnit = new CashUnitInfo
+-                            {
+-                                Denomination = unit.denomination,
+-                                Count = unit.count,
+-                                CurrencyCode = "USD",  // Hardcoded because it's not provided in the native result
+-                                Type = (int)unit.type
+-                            };
+-                            dispenseResult.DispensedUnits.Add(cashUnit);
+-                            LogToFile($"DispenseCash: cashUnit[{i}] type={unit.type}, denomination={unit.denomination}, count={unit.count}, currencyCode='USD'.");
+-                        }
+-                    }
+-                    else
+-                    {
+-                        LogToFile("Warning: cashUnitSet ptr NULL, units empty");
+-                    }
++            var dispenseResult = new DispenseCashResult { Success = false, AmountDispensed = (int)result.amountDispensed };
++            if (result.error == CTMDispenseCashError.CTM_DISPENSE_CASH_SUCCESS)
++            {
++                dispenseResult.Success = true;
++                LogToFile($" success — dispensed {result.amountDispensed}");
++            }
+ 
+-                    // Device error if main error != 0
+-                    if (result.error != 0)
++            if (result.cashUnitSet.intPtr != IntPtr.Zero && result.cashUnitSet.count > 0)
++            {
++                int unitSize = Marshal.SizeOf(typeof(CTMCashUnit));
++                for (int i = 0; i < result.cashUnitSet.count; i++)
++                {
++                    IntPtr unitPtr = IntPtr.Add(result.cashUnitSet.intPtr, i * unitSize);
++                    var unit = (CTMCashUnit)Marshal.PtrToStructure(unitPtr, typeof(CTMCashUnit));
++                    var cashUnit = new CashUnitInfo
+                     {
+-                        dispenseResult.DeviceError = result.error.ToString();
+-                        LogToFile($"DeviceError: code={result.error}");
+-                    }
+-
+-                    return dispenseResult;
++                        Denomination = unit.denomination,
++                        Count = unit.count,
++                        CurrencyCode = "USD",  
++                        Type = (int)unit.type
++                    };
++                    dispenseResult.DispensedUnits.Add(cashUnit);
++                    LogToFile($"DispenseCash: cashUnit[{i}] type={unit.type}, denomination={unit.denomination}, count={unit.count}, currencyCode='USD'.");
+                 }
+-
+-                // Real error
+-                _lastError = result.error.ToString();
+-                LogToFile($"✗ DispenseCash failed: {result.error}");
+-                return dispenseResult;
+             }
+-            catch (Exception ex)
++            else
+             {
+-                _lastError = $"EX: {ex.Message}";
+-                LogToFile($"EX in DispenseCash: {ex}");
+-                return new DispenseCashResult { Error = _lastError };
++                LogToFile("Warning: cashUnitSet ptr NULL, units empty");
+             }
++            return dispenseResult;
+         }
+ 
+         public ArrayList GetDispensableCashCounts()
+@@ -519,6 +543,8 @@ namespace CTMOleClient
+ 
+         private void AddCallbacks()
+         {
++            if (_eventsEnabled) return;
++
+             _deviceErrorCallback = HandleDeviceError;
+             _cashAcceptCallback = HandleCashAccept;
+             _cashAcceptCompleteCallback = HandleCashAcceptComplete;
+@@ -529,14 +555,48 @@ namespace CTMOleClient
+             _cmClosedCallback = HandleCMClosed;
+ 
+             CtmCClient.AddDeviceErrorEventHandler(_deviceErrorCallback);
++            LogToFile("DeviceErrorEvent handler added.");
++
+             CtmCClient.AddCashAcceptEventHandler(_cashAcceptCallback);
++            LogToFile("CashAccept handler added.");
++
+             CtmCClient.AddCashAcceptCompleteEventHandler(_cashAcceptCompleteCallback);
++            LogToFile("CashAcceptComplete handler added.");
++
+             CtmCClient.AddDeviceStatusEventHandler(_deviceStatusCallback);
+-           
++            LogToFile("DeviceStatus handler added.");
++
+             CtmCClient.AddSocketClosedEventHandler(_socketClosedCallback);
++            LogToFile("SocketClosed handler added.");
++             
+             CtmCClient.AddChangeContextEventHandler(_changeContextCallback);
++            LogToFile("ChangeContext handler added.");
++
+             CtmCClient.AddAuthenticationEventHandler(_authenticationCallback);
++            LogToFile("Authentication handler added.");
++
+             CtmCClient.AddCMClosedEventHandler(_cmClosedCallback);
++            LogToFile("CMClosed handler added.");
++
++            _eventsEnabled = true;
++            LogToFile("✓ All callbacks registered");
++
++        }
++
++        private void RemoveCallbacks()
++        {
++            if (!_eventsEnabled) return;
++            CtmCClient.RemoveDeviceErrorEventHandler(_deviceErrorCallback);
++            CtmCClient.RemoveCashAcceptEventHandler(_cashAcceptCallback);
++            CtmCClient.RemoveCashAcceptCompleteEventHandler(_cashAcceptCompleteCallback);
++            CtmCClient.RemoveDeviceStatusEventHandler(_deviceStatusCallback);
++            CtmCClient.RemoveSocketClosedEventHandler(_socketClosedCallback);
++            CtmCClient.RemoveChangeContextEventHandler(_changeContextCallback);
++            CtmCClient.RemoveAuthenticationEventHandler(_authenticationCallback);
++            CtmCClient.RemoveCMClosedEventHandler(_cmClosedCallback);
++            
++            _eventsEnabled = false;
++            LogToFile("✓ All callbacks unregistered");
+         }
+ 
+         private void HandleDeviceError(CTMEventInfo evtInfo, CTMDeviceError deviceError)
+@@ -585,12 +645,14 @@ namespace CTMOleClient
+         {
+             string statusInfo = $"Статус: Model={deviceStatus.deviceInfo.deviceModel}, State={deviceStatus.status}";
+             LogToFile($"DeviceStatus: {statusInfo}");
++            _deviceStatuses[deviceStatus.deviceInfo.deviceType] = deviceStatus.status;
++            LogToFile($"Device {deviceStatus.deviceInfo.deviceType} status updated: {deviceStatus.status} (ready if >0)");
+             if (_eventsEnabled && _uiContext != null)
+             {
+                 _uiContext.Post(_ => InvokeOneCEvent("OnDeviceStatus", new object[] { statusInfo }), null);
+             }
+         }
+-       
++
+         private void HandleSocketClosed(CTMEventInfo evtInfo)
+         {
+             string info = "Соединение с CTM-сервисом закрыто.";
+@@ -703,35 +765,47 @@ namespace CTMOleClient
+ 
+                 _lastError = "";
+                 IntPtr txnPtr;
+-                var error = CtmCClient.BeginCashManagementTransaction(userId, cashierId, out txnPtr);  // Call with out IntPtr
++                var error = CtmCClient.BeginCashManagementTransaction(userId, cashierId, out txnPtr); // Call with out IntPtr
+                 LogToFile($"BeginCM raw result: error={error}, txnPtr={txnPtr.ToInt64():X}");
+ 
+-                // HACK for emulators: if ptr NULL use generated ID
+                 string generatedId = $"CM_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
+-                if (txnPtr == IntPtr.Zero)
+-                {
+-                    txnId = generatedId;  // Fallback
+-                    _cmTxnId = txnId;
+-                    LogToFile($"✓ HACK: ptr NULL, but success — using generated ID: {txnId}");
+-                    return true;
+-                }
+ 
+-                // Normal case
+-                txnId = Marshal.PtrToStringAnsi(txnPtr) ?? generatedId;
+-                _cmTxnId = txnId;
++                // *** ИСПРАВЛЕНИЕ: Сначала проверяем код ошибки ***
+                 if (error == CTMBeginTransactionError.CTM_BEGIN_TRX_SUCCESS)
+                 {
+-                    Marshal.FreeHGlobal(txnPtr);
+-                    LogToFile($"✓ CM Transaction started: txnId={txnId}");
+-                    return true;
++                    // Успех. Теперь разбираемся с указателем.
++                    if (txnPtr == IntPtr.Zero)
++                    {
++                        // HACK for emulators: Успех, но указатель пустой
++                        txnId = generatedId;  // Fallback
++                        _cmTxnId = txnId;
++                        LogToFile($"✓ HACK: ptr NULL, but success — using generated ID: {txnId}");
++                        return true;
++                    }
++                    else
++                    {
++                        // Нормальный случай: Успех и есть указатель
++                        txnId = Marshal.PtrToStringAnsi(txnPtr) ?? generatedId;
++                        _cmTxnId = txnId;
++                        Marshal.FreeHGlobal(txnPtr); // Освобождаем память *после* использования
++                        LogToFile($"✓ CM Transaction started: txnId={txnId}");
++                        return true;
++                    }
+                 }
++                else
++                {
++                    // *** ОБРАБОТКА ОШИБКИ ***
++                    // Теперь ошибка CTM_BEGIN_TRX_ERROR_ALREADY_IN_PROGRESS попадет сюда
++                    _lastError = error.ToString();
++                    LogToFile($"✗ CM Transaction failed: {error}");
+ 
+-                // Error
+-                if (txnPtr != IntPtr.Zero)
+-                    Marshal.FreeHGlobal(txnPtr);
+-                _lastError = error.ToString();
+-                LogToFile($"✗ CM Transaction failed: {error}");
+-                return false;
++                    // На всякий случай освобождаем память, если она была выделена при ошибке
++                    if (txnPtr != IntPtr.Zero)
++                    {
++                        Marshal.FreeHGlobal(txnPtr);
++                    }
++                    return false;
++                }
+             }
+             catch (Exception ex)
+             {
+@@ -755,18 +829,22 @@ namespace CTMOleClient
+                 }
+ 
+                 _lastError = "";
+-                var result = CtmCClient.EndCashManagementTransaction(actualTxnId);  // Returns CTMEndTransactionResult (success=0)
+-                LogToFile($"EndCM raw result: error={result}");
++                var result = CtmCClient.EndCashManagementTransaction(actualTxnId);  // Теперь: CTMEndTransactionResult, без ambiguous
++                LogToFile($"EndCM raw result: error={result} (int: {(int)result})");
+ 
+-                // HACK for emulators: if garbage error > 1,000,000 treat as OK (server success)
+-                if ((int)result != 0 && (int)result < 1000000)
++                // Хак для эмулятора: garbage >1e6 = OK
++                bool success = (result == CTMEndTransactionResult.CTM_END_TRX_SUCCESS) ||
++                               (result == CTMEndTransactionResult.CTM_END_TRX_ERROR_NO_TRANSACTION_IN_PROGRESS);  // Graceful: no txn = OK
++                if (!success && (int)result > 1000000) success = true;
++
++                if (!success)
+                 {
+-                    LogToFile($"✗ EndCM raw error: {result} (real error)");
++                    LogToFile($"✗ EndCM real error: {result}");
+                     _lastError = result.ToString();
+                     return false;
+                 }
+ 
+-                _cmTxnId = "";  // Reset ID
++                _cmTxnId = "";  // Reset
+                 LogToFile($"✓ CM Transaction ended: txnId={actualTxnId}");
+                 return true;
+             }
+@@ -777,7 +855,6 @@ namespace CTMOleClient
+                 return false;
+             }
+         }
+-
+         public CTMAcceptCashRequestResult BeginRefill(int targetAmount = -1)
+         {
+             LogToFile($"BeginRefill: targetAmount={targetAmount} (CM txn: {_cmTxnId})");
+@@ -829,34 +906,6 @@ namespace CTMOleClient
+             }
+         }
+ 
+-        public object GetFullConfig()
+-        {
+-            LogToFile("GetFullConfig: called.");
+-            try
+-            {
+-                _lastError = "";
+-                var configResult = CtmCClient.GetConfig();
+-                LogToFile($"GetFullConfig: received config with {configResult.config.count} entries.");
+-
+-                if (configResult.config.count == 0)
+-                {
+-                    _lastError = "Config empty";
+-                    LogToFile("GetFullConfig: Config empty.");
+-                    return new ConfigInfo(configResult.config);  
+-                }
+-
+-                var configInfo = new ConfigInfo(configResult.config);
+-                LogToFile("GetFullConfig: ConfigInfo constructed.");
+-
+-                _lastError = "OK";
+-                return configInfo;
+-            }
+-            catch (Exception ex)
+-            {
+-                _lastError = ex.Message;
+-                LogToFile($"GetFullConfig: EXCEPTION {ex.Message}.");
+-                return new ConfigInfo(new CTMConfiguration { count = 0 });  
+-            }
+-        }
++       
+     }
+ }
+\ No newline at end of file
+diff --git a/CTMOleClient/DllImport.cs b/CTMOleClient/DllImport.cs
+index 9511e84..af2dd12 100644
+--- a/CTMOleClient/DllImport.cs
++++ b/CTMOleClient/DllImport.cs
+@@ -92,19 +92,16 @@ namespace CTMOnCSharp
+         public static extern CTMGetConfigResult GetConfig();
+ 
+ 
+-
+-
+-        // Для BeginCustomerTransaction (POS customer start)
+         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_begin_customer_transaction", CallingConvention = CallingConvention.Cdecl)]
+         public static extern CTMBeginTransactionResult BeginCustomerTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
+ 
+ 
+         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_transaction", CallingConvention = CallingConvention.Cdecl)]
+-        public static extern CTMBeginTransactionError EndCustomerTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
++        public static extern CTMEndTransactionResult EndCustomerTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);  // Было CTMBeginTransactionError — смени!
++
++  
+ 
+ 
+-        [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_transaction", CallingConvention = CallingConvention.Cdecl)]
+-        public static extern CTMEndTransactionResult EndTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
+ 
+ 
+ 
+@@ -135,9 +132,7 @@ namespace CTMOnCSharp
+         public static extern void FreeString(IntPtr ptr);
+ 
+ 
+-       // [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_cash_management_transaction", CallingConvention = CallingConvention.Cdecl)]
+-       // public static extern CTMEndTransactionResult EndCashManagementTransaction([MarshalAs(UnmanagedType.LPStr)] string txnId);
+-
++       
+         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_begin_refill", CallingConvention = CallingConvention.Cdecl)]
+         public static extern CTMAcceptCashRequestResult BeginRefill(int targetAmount = -1); 
+ 
+@@ -256,12 +251,12 @@ namespace CTMOnCSharp
+ 
+ 
+ 
+-
+-        [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_transaction", CallingConvention = CallingConvention.Cdecl)]
+-        public static extern CTMBeginTransactionError EndCashManagementTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
+-
+         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_begin_cash_management_transaction", CallingConvention = CallingConvention.Cdecl)]
+         public static extern CTMBeginTransactionError BeginCashManagementTransaction([MarshalAs(UnmanagedType.LPStr)] string userId, [MarshalAs(UnmanagedType.LPStr)] string cashierId, out IntPtr transactionIdPtr);
+ 
++        [DllImport("libctmclient-0.dll", EntryPoint = "ctm_end_transaction", CallingConvention = CallingConvention.Cdecl)]
++        public static extern CTMEndTransactionResult EndCashManagementTransaction([MarshalAs(UnmanagedType.LPStr)] string transactionId);
++     
++      
+     }
+ }
+diff --git a/CTMOleClient/Enum.cs b/CTMOleClient/Enum.cs
+index a080074..2843ec9 100644
+--- a/CTMOleClient/Enum.cs
++++ b/CTMOleClient/Enum.cs
+@@ -93,12 +93,16 @@ namespace CTMOnCSharp
+         CTM_BEGIN_TRX_ERROR_UNHANDLED_EXCEPTION = 99
+     }
+ 
+-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
++    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+     [ComVisible(true)]
+     public struct CTMBeginTransactionResult
+     {
++        public IntPtr intPtr;
++        public string transactionId
++        {
++            get { return Marshal.PtrToStringAnsi(intPtr); }
++        }
+         public CTMBeginTransactionError error;
+-        public IntPtr transactionId;  // char* из C
+     }
+ 
+     [ComVisible(true)]
+diff --git a/CTMOleClient/Struct.cs b/CTMOleClient/Struct.cs
+index 9bccba7..0148cfd 100644
+--- a/CTMOleClient/Struct.cs
++++ b/CTMOleClient/Struct.cs
+@@ -44,22 +44,25 @@ namespace CTMOnCSharp
+     };
+ 
+ 
+-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
++    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+     [ComVisible(true)]
+     public struct BeginCustomerTransactionResult
+     {
++        public IntPtr intPtr;
++        public string transactionId
++        {
++            get { return Marshal.PtrToStringAnsi(intPtr); }
++        }
+         public CTMBeginTransactionError error;
+-        [MarshalAs(UnmanagedType.LPStr)]
+-        public IntPtr transactionId;
+     }
+ 
+ 
+-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
++    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+     [ComVisible(true)]
+     public struct CTMDispenseCashResult
+     {
+-        [MarshalAs(UnmanagedType.I4)]
+-        public int amountDispensed;
++        [MarshalAs(UnmanagedType.U4)]
++        public UInt32 amountDispensed;
+ 
+         public CTMCashUnitSet cashUnitSet;
+ 
