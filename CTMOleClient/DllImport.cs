@@ -237,6 +237,8 @@ namespace CTMOnCSharp
         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_purge_coins", CallingConvention = CallingConvention.Cdecl)]
         public static extern CTMPurgeCoinsResult PurgeCoins(CTMPurgeCoinsLocation purgeCoinsLocation);
 
+
+
         [DllImport("user32.dll")]
         static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
 

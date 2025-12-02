@@ -336,6 +336,8 @@ namespace CTMOnCSharp
         CTM_CLEAR_PURGED_STATUS_NOT_CONNECTED
     };
 
+
+
     [ComVisible(true)]
     public enum CTMGetPurgedStatusResult
     {
@@ -503,5 +505,6 @@ namespace CTMOnCSharp
         CTM_AUTHENTICATION_PASSWORD_IS_INCORRECT,
         CTM_AUTHENTICATE_SUCCESS = 99
     }
+
 
 }

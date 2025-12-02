@@ -1,6 +1,7 @@
-﻿using System;
-using System.Runtime.InteropServices;
+﻿using CTMOnCSharp;
+using System;
 using System.Collections;
+using System.Runtime.InteropServices;
 
 namespace CTMOleClient
 {
@@ -104,4 +105,63 @@ namespace CTMOleClient
             return $"Notes: {AcceptedNoteDenominations}; Coins: {AcceptedCoinDenominations}; Dispensed: {DispensedDenominations}; Currency: {CurrencyCode}; Lang: {LanguageCode}";
         }
     }
+    
+    [ComVisible(true)]
+    [Guid("0E4CF82D-FB86-42A5-8C5E-FB7F26CF6BAC")]
+    [ProgId("CTMOleClient.TransferBinResult")]
+    [ClassInterface(ClassInterfaceType.None)]
+    public class TransferBinResult
+    {
+        public bool Success { get; set; } = false;
+        public int TransferredAmount { get; set; } = 0;
+        public string Error { get; set; } = "";
+
+        public TransferBinResult() { }
+    }
+
+    [ComVisible(true)]
+    [Guid("C747C4F5-20D0-4D34-8DE8-34F94FABE06E")]
+    [ProgId("CTMOleClient.DeviceStatusInfo")]
+    [ClassInterface(ClassInterfaceType.None)]
+    public class DeviceStatusInfo
+    {
+        public int Timestamp { get; set; } = 0;
+        public int DeviceType { get; set; } = 0;  // CTMDeviceType
+        public int DeviceId { get; set; } = 0;
+        public string DeviceModel { get; set; } = string.Empty;
+        public string DeviceSubModel { get; set; } = string.Empty;
+        public int Status { get; set; } = 0;
+
+        public DeviceStatusInfo() { }
+    }
+
+
+    [ComVisible(true)]
+    [Guid("8DF07B7E-C84A-4F62-BAFE-AD6F3B306B0E")]
+    [ProgId("CTMOleClient.PurgeCoinsResult")]
+    [ClassInterface(ClassInterfaceType.None)]
+    public class PurgeCoinsResult
+    {
+        public CTMPurgeCoinsError Error { get; set; } = CTMPurgeCoinsError.CTM_PURGE_COINS_UNHANDLED_EXCEPTION;
+        public ArrayList PurgedUnits { get; set; } = new ArrayList();  // Список CashUnitInfo для 1C
+        public bool Success { get; set; } = false;
+
+        public PurgeCoinsResult() { }
+    }
+
+    [ComVisible(true)]
+    [Guid("F806264F-19B4-444A-BE65-5819496B1945")]
+    [ProgId("CTMOleClient.TransferAllNotesResult")]
+    [ClassInterface(ClassInterfaceType.None)]
+    public class TransferAllNotesResult
+    {
+        public bool Success { get; set; } = false;
+        public int TransferredAmount { get; set; } = 0;
+        public string Error { get; set; } = "";
+        public ArrayList TransferredUnits { get; set; } = new ArrayList();  // Список CashUnitInfo для 1C
+
+        public TransferAllNotesResult() { }
+    }
+
+
 }

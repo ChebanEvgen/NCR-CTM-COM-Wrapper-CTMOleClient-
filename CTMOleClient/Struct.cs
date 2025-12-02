@@ -117,7 +117,7 @@ namespace CTMOnCSharp
         public CTMCashUnit cashUnit;
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     [ComVisible(true)]
     public struct CTMCashUnit
     {
@@ -150,7 +150,7 @@ namespace CTMOnCSharp
         }
     };
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     [ComVisible(true)]
     public struct CTMGetCashCountsResult
     {
