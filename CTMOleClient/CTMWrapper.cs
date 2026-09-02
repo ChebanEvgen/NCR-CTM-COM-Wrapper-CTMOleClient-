@@ -47,7 +47,7 @@ namespace CTMOleClient
         CTMAcceptCashRequestResult BeginRefill(int targetAmount = -1);
         bool EndRefill();
 
-        CTMDeviceTestResult TestAllDevices();
+        int TestAllDevices(out string errorDescription);
 
         object TransferAllToCashbox();
         object TransferAllNotesToCashbox_old();
@@ -213,25 +213,32 @@ namespace CTMOleClient
             return result;
         }
 
-        public CTMDeviceTestResult TestAllDevices()
+        public int TestAllDevices(out string errorDescription)
         {
             LogToFile("TestAllDevices: called.");
+            errorDescription = string.Empty;
             try
             {
                 _lastError = "";
+
+                // Вызываем нативный метод (вся работа с IntPtr происходит здесь, в безопасном C#)
                 CTMDeviceTestResult result = CtmCClient.TestAllDevices();
 
-                // Логируем результат (например, статус ошибки)
+                int errorCode = (int)result.error;
                 _lastError = result.error.ToString();
-                LogToFile($"TestAllDevices finished: error={result.error}");
+                errorDescription = _lastError;
 
-                return result;
+                // Если есть ошибки в наборе deviceErrorSet, можно дополнительно залогировать
+                LogToFile($"TestAllDevices finished: error={errorCode} ({_lastError}), error count={result.deviceErrorSet.count}");
+
+                return errorCode;
             }
             catch (Exception ex)
             {
                 _lastError = ex.Message;
+                errorDescription = ex.Message;
                 LogToFile($"TestAllDevices: EXCEPTION {ex.Message}");
-                return new CTMDeviceTestResult();
+                return -999;
             }
         }
 

@@ -137,15 +137,17 @@ namespace CTMOleClient.Tests
         {
             LogToConsole("Test_TestAllDevices: Starting...");
 
-            // Act: Вызываем метод тестирования всех устройств через обертку
-            CTMDeviceTestResult testResult = _wrapper.TestAllDevices();
+            // Act: Вызываем обновленный метод тестирования всех устройств с out-параметром
+            string errorDescription;
+            int errorCode = _wrapper.TestAllDevices(out errorDescription);
             string lastError = _wrapper.GetLastError();
 
-            LogToConsole($"TestAllDevices result: error={testResult.error}, LastError='{lastError}'");
+            LogToConsole($"TestAllDevices result: errorCode={errorCode}, description='{errorDescription}', LastError='{lastError}'");
 
-            // Assert: Проверяем, что метод отработал и обновил LastError
-            Assert.IsNotNull(testResult, "TestAllDevices should return a result structure");
-            Assert.IsFalse(string.IsNullOrEmpty(lastError), "LastError should be populated after TestAllDevices");
+            // Assert: Проверяем, что метод вернул валидный код и заполнил ошибки
+            Assert.AreEqual(0, errorCode, $"TestAllDevices failed with error code: {errorCode}");
+            Assert.AreEqual("OK", lastError, "LastError should be OK after successful device test");
+            Assert.IsFalse(string.IsNullOrEmpty(errorDescription), "Error description should be populated");
 
             LogToConsole("Test_TestAllDevices: SUCCESS - Device test executed.");
         }
