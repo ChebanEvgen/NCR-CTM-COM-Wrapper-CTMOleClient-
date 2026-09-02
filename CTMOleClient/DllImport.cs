@@ -222,6 +222,7 @@ namespace CTMOnCSharp
         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_test_all_devices", CallingConvention = CallingConvention.Cdecl)]
         public static extern CTMDeviceTestResult TestAllDevices();
 
+
         [DllImport("libctmclient-0.dll", EntryPoint = "ctm_get_diag_files", CallingConvention = CallingConvention.Cdecl)]
         public static extern CTMGetDiagFilesResult GetDiagFiles();
 

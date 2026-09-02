@@ -47,6 +47,8 @@ namespace CTMOleClient
         CTMAcceptCashRequestResult BeginRefill(int targetAmount = -1);
         bool EndRefill();
 
+        CTMDeviceTestResult TestAllDevices();
+
         object TransferAllToCashbox();
         object TransferAllNotesToCashbox_old();
         object TransferFromBinToCashbox(object cashUnitsObj);
@@ -210,6 +212,29 @@ namespace CTMOleClient
             LogToFile($"Reinitialize: result = {(result ? "SUCCESS" : "FAIL")}");
             return result;
         }
+
+        public CTMDeviceTestResult TestAllDevices()
+        {
+            LogToFile("TestAllDevices: called.");
+            try
+            {
+                _lastError = "";
+                CTMDeviceTestResult result = CtmCClient.TestAllDevices();
+
+                // Логируем результат (например, статус ошибки)
+                _lastError = result.error.ToString();
+                LogToFile($"TestAllDevices finished: error={result.error}");
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _lastError = ex.Message;
+                LogToFile($"TestAllDevices: EXCEPTION {ex.Message}");
+                return new CTMDeviceTestResult();
+            }
+        }
+
 
         public string GetConfig(string key)
         {
@@ -851,6 +876,7 @@ namespace CTMOleClient
             return _logPath ?? string.Empty;
         }
 
+
         public bool BeginCashManagementTransaction(string userId, string cashierId, out string txnId)
         {
             txnId = string.Empty;
@@ -930,6 +956,9 @@ namespace CTMOleClient
                 return false;
             }
         }
+
+
+
 
         public CTMAcceptCashRequestResult BeginRefill(int targetAmount = -1)
         {
