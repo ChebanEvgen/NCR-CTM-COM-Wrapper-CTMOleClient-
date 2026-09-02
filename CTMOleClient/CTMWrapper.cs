@@ -4,10 +4,13 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+
+using static PaymentChecker;
 
 
 namespace CTMOleClient
@@ -46,7 +49,7 @@ namespace CTMOleClient
 
         object TransferAllToCashbox();
         object TransferAllNotesToCashbox_old();
-        object TransferFromBinToCashbox(object cashUnitsObj);  
+        object TransferFromBinToCashbox(object cashUnitsObj);
 
         CTMResetCountsResult ResetDispensableCoinCounts();
         CTMResetCountsResult ResetNonDispensableCoinCounts();
@@ -56,6 +59,8 @@ namespace CTMOleClient
         object PurgeCoins(CTMPurgeCoinsLocation purgeCoinsLocation);
         object TransferAllNotesToCashbox();
         object DispenseCashByDenomination(object cashUnitsObj);
+
+        string CheckAllPayments(object levelsFrom1C, double maxAmount, out bool success);
 
     }
 
@@ -75,7 +80,7 @@ namespace CTMOleClient
         private string _clientId = "";
 
 
-        public CTMWrapper() : base() {}
+        public CTMWrapper() : base() { }
 
         private CtmCClient.OnDeviceErrorCallBack _deviceErrorCallback;
         private CtmCClient.OnCashAcceptCallBack _cashAcceptCallback;
@@ -95,23 +100,23 @@ namespace CTMOleClient
         public override void Init(object pConnection)
         {
             LogToFile("Init: called.");
-            SetConnection(pConnection);  
+            SetConnection(pConnection);
         }
 
         public void SetConnection(object pConnection)
         {
             _oneCObject = pConnection;  // This is the 1C form object
             _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
-            LogToFile($"SetConnection: UI Context captured for 1C 8.2 form ({_uiContext.GetType().Name}).");
+            LogToFile($"SetConnection: UI Context captured for 1C 8.3 form ({_uiContext.GetType().Name}).");
         }
 
         public override void Done()
         {
-            _uiContext = null;  
-            GC.Collect();       
+            _uiContext = null;
+            GC.Collect();
             GC.WaitForPendingFinalizers();
 
-            base.Done();  
+            base.Done();
             LogToFile("Done: UI Context freed and finalizers executed.");
         }
 
@@ -141,7 +146,11 @@ namespace CTMOleClient
 
         public bool Initialize(string clientId, string overrideHost = null, string overridePort = null)
         {
-            LogToFile($"Initialize: called with clientId='{clientId}', overrideHost='{overrideHost ?? "null"}', overridePort='{overridePort ?? "null"}'.");            try
+            string assemblyVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString();
+            string buildTime = System.IO.File.GetLastWriteTime(typeof(CTMWrapper).Assembly.Location).ToString("yyyy-MM-dd HH:mm:ss");
+
+            LogToFile($"--- INITIALIZE CALLED --- Assembly Version: {assemblyVersion}, Build Time: {buildTime}");
+            LogToFile($"Initialize: called with clientId='{clientId}', overrideHost='{overrideHost ?? "null"}', overridePort='{overridePort ?? "null"}'."); try
             {
                 _lastError = "";
                 string serviceLocation = overrideHost ?? "localhost";
@@ -175,14 +184,14 @@ namespace CTMOleClient
             LogToFile("Uninitialize: called.");
             try
             {
-                UnadviseEvents();  
-                CtmCClient.Uninitialize();  
+                UnadviseEvents();
+                CtmCClient.Uninitialize();
                 _lastError = "Uninitialized";
                 _uiContext = null;
 
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
-                GC.Collect();  
+                GC.Collect();
 
                 LogToFile("Uninitialize: Complete, handlers freed, GC done.");
             }
@@ -234,7 +243,7 @@ namespace CTMOleClient
                 return string.Empty;
             }
         }
-        
+
         public object GetFullConfig()
         {
             LogToFile("GetFullConfig: called.");
@@ -321,10 +330,10 @@ namespace CTMOleClient
                 var result = CtmCClient.EndCustomerTransaction(actualTxnId);  // Вызов DLL
                 LogToFile($"EndCustomer raw result: {result} (int: {(int)result})");
 
-                bool success = (result == CTMEndTransactionResult.CTM_END_TRX_SUCCESS) ;  
+                bool success = (result == CTMEndTransactionResult.CTM_END_TRX_SUCCESS);
 
-                _lastError = success ? "OK" : result.ToString(); 
-                _customerTxnId = string.Empty;  
+                _lastError = success ? "OK" : result.ToString();
+                _customerTxnId = string.Empty;
 
                 if (!success)
                 {
@@ -342,7 +351,7 @@ namespace CTMOleClient
                 return false;
             }
         }
-   
+
         public bool AcceptCash(int amount)
         {
             LogToFile($"AcceptCash: requested amount={amount}.");
@@ -386,7 +395,7 @@ namespace CTMOleClient
                     {
                         Denomination = unit.denomination,
                         Count = unit.count,
-                        CurrencyCode = "USD",  
+                        CurrencyCode = "USD",
                         Type = (int)unit.type
                     };
                     dispenseResult.DispensedUnits.Add(cashUnit);
@@ -426,21 +435,21 @@ namespace CTMOleClient
                 {
                     _lastError = result.error.ToString();
                     LogToFile($"GetDispensableCashCounts: error {result.error} — return empty list.");
-                    return new ArrayList();   
+                    return new ArrayList();
                 }
             }
             catch (Exception ex)
             {
                 _lastError = ex.Message;
                 LogToFile($"GetDispensableCashCounts: EXCEPTION {ex.Message}");
-                return new ArrayList();   
+                return new ArrayList();
             }
         }
 
         public ArrayList GetNonDispensableCashCounts_old()
         {
             LogToFile("GetNonDispensableCashCounts: called.");
-           
+
             var list = new ArrayList();
             CTMCashUnitSet cashUnitSet = new CTMCashUnitSet();  // Для ref в finally
             try
@@ -548,7 +557,7 @@ namespace CTMOleClient
                 return new ArrayList();
             }
         }
-       
+
         public void AdviseEvents()
         {
             LogToFile("AdviseEvents: called.");
@@ -593,7 +602,7 @@ namespace CTMOleClient
                 }
                 if (_authenticationCallback != null)
                 {
-                    CtmCClient.RemoveAuthenticationEventHandler(_authenticationCallback); 
+                    CtmCClient.RemoveAuthenticationEventHandler(_authenticationCallback);
                     _authenticationCallback = null;
                 }
                 if (_cmClosedCallback != null)
@@ -638,7 +647,7 @@ namespace CTMOleClient
 
             CtmCClient.AddSocketClosedEventHandler(_socketClosedCallback);
             LogToFile("SocketClosed handler added.");
-             
+
             CtmCClient.AddChangeContextEventHandler(_changeContextCallback);
             LogToFile("ChangeContext handler added.");
 
@@ -664,7 +673,7 @@ namespace CTMOleClient
             CtmCClient.RemoveChangeContextEventHandler(_changeContextCallback);
             CtmCClient.RemoveAuthenticationEventHandler(_authenticationCallback);
             CtmCClient.RemoveCMClosedEventHandler(_cmClosedCallback);
-            
+
             _eventsEnabled = false;
             LogToFile("✓ All callbacks unregistered");
         }
@@ -686,13 +695,17 @@ namespace CTMOleClient
                 uint amount = acceptEvent.amount;
                 uint amountDue = acceptEvent.amountDue;
                 int denom = acceptEvent.cashUnit.denomination;
+                int type = (acceptEvent.cashUnit.type == CTMCashType.CTM_CASH_TYPE_NOTE) ? 0 : 1;
+                // int type = (int) acceptEvent.cashUnit.type;
+
                 string curr = acceptEvent.cashUnit.currencyCode ?? "USD";
 
                 LogToFile($"CashAccept: Принято: {amount} {curr}, Сумма: {denom}, Итого: {amountDue}");
 
                 if (_eventsEnabled && _uiContext != null && _oneCObject != null)
                 {
-                    object[] params1C = { (int)amount, (int)amountDue, denom, curr };
+                    object[] params1C = { (int)amount, (int)amountDue, denom, curr, type };
+                    //object[] params1C = { (int)amount, (int)amountDue, denom, curr };
                     _uiContext.Post(_ => InvokeOneCEvent("OnCashAccept", params1C), null);
                 }
             }
@@ -730,14 +743,14 @@ namespace CTMOleClient
             string logInfo = $"DeviceStatus: Type={statusObj.DeviceType}, ID={statusObj.DeviceId}, Model={statusObj.DeviceModel}, Status={statusObj.Status} ";
             LogToFile(logInfo);
             _deviceStatuses[deviceStatus.deviceInfo.deviceType] = deviceStatus.status;
-             LogToFile($"Device {deviceStatus.deviceInfo.deviceType} status updated: {deviceStatus.status} (ready if >0)");
+            LogToFile($"Device {deviceStatus.deviceInfo.deviceType} status updated: {deviceStatus.status} (ready if >0)");
             if (_eventsEnabled && _uiContext != null)
             {
                 _uiContext.Post(_ => InvokeOneCEvent("OnDeviceStatus", new object[] { statusObj }), null);
             }
 
 
-     
+
         }
 
         private void HandleSocketClosed(CTMEventInfo evtInfo)
@@ -816,11 +829,11 @@ namespace CTMOleClient
 
         private void LogToFile(string message)
         {
-            if (string.IsNullOrEmpty(_logPath)) return; 
+            if (string.IsNullOrEmpty(_logPath)) return;
 
             try
             {
-              
+
                 Directory.CreateDirectory(Path.GetDirectoryName(_logPath));
                 File.AppendAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
             }
@@ -840,7 +853,7 @@ namespace CTMOleClient
 
         public bool BeginCashManagementTransaction(string userId, string cashierId, out string txnId)
         {
-            txnId = string.Empty;  
+            txnId = string.Empty;
             LogToFile($"BeginCashManagementTransaction: userId='{userId}', cashierId='{cashierId}'");
 
             try
@@ -873,7 +886,7 @@ namespace CTMOleClient
                 return false;
             }
         }
-       
+
         public bool EndCashManagementTransaction(string txnId)
         {
             LogToFile($"EndCashManagementTransaction: txnId='{txnId ?? _cmTxnId}'");
@@ -893,15 +906,15 @@ namespace CTMOleClient
 
                 if (result == CTMEndTransactionResult.CTM_END_TRX_SUCCESS)
                 {
-                    _cmTxnId = "";  
+                    _cmTxnId = "";
                     LogToFile($"✓ CM Transaction ended: txnId={actualTxnId}");
                     return true;
                 }
                 else if (result == CTMEndTransactionResult.CTM_END_TRX_ERROR_NO_TRANSACTION_IN_PROGRESS)
                 {
-                    _cmTxnId = "";  
+                    _cmTxnId = "";
                     LogToFile($"✓ No active txn — graceful end: {actualTxnId}");
-                    return true; 
+                    return true;
                 }
                 else
                 {
@@ -917,7 +930,7 @@ namespace CTMOleClient
                 return false;
             }
         }
-       
+
         public CTMAcceptCashRequestResult BeginRefill(int targetAmount = -1)
         {
             LogToFile($"BeginRefill: targetAmount={targetAmount} (CM txn: {_cmTxnId})");
@@ -925,7 +938,7 @@ namespace CTMOleClient
             {
                 if (string.IsNullOrEmpty(_cmTxnId)) { _lastError = "No active CM transaction"; return CTMAcceptCashRequestResult.CTM_ACCEPT_CASH_ERROR_NEEDS_OPEN_TRANSACTION_ID; }
                 _lastError = "";
-                var result = CtmCClient.BeginRefill(targetAmount);  
+                var result = CtmCClient.BeginRefill(targetAmount);
                 if (result == CTMAcceptCashRequestResult.CTM_ACCEPT_CASH_SUCCESS)
                 {
                     LogToFile("Refill started: acceptors enabled");
@@ -987,7 +1000,7 @@ namespace CTMOleClient
                 var result = CtmCClient.TransferAllFromLoaderToCashbox();
                 var transferResult = new
                 {
-                    Success = (result.error == CTMTransferCashError.CTM_TRANSFER_SUCCESS),  
+                    Success = (result.error == CTMTransferCashError.CTM_TRANSFER_SUCCESS),
                     TransferredAmount = result.transferredCash.transferredAmount,
                     Error = result.error.ToString()
                 };
@@ -1491,8 +1504,178 @@ namespace CTMOleClient
                 GC.WaitForPendingFinalizers();
             }
         }
+
+
+        public string CheckAllPayments(object levelsFrom1C, double maxAmount, out bool success)
+        {
+            success = false;
+            var levels = new List<CashLevel>();
+
+            try
+            {
+                if (levelsFrom1C == null)
+                    return "Ошибка: levelsFrom1C = null";
+
+                // --- Универсальный разбор того, что приходит из 1С ---
+                IEnumerable enumerable = levelsFrom1C as IEnumerable;
+                if (enumerable == null)
+                    return "Ошибка: не удалось получить перечисление из levelsFrom1C. Тип: " + levelsFrom1C.GetType().FullName;
+
+                foreach (object item in enumerable)
+                {
+                    if (item == null) continue;
+
+                    try
+                    {
+                        dynamic dyn = item;
+
+                        // Пробуем получить свойства value и stored
+                        object valObj = dyn.value;
+                        object storedObj = dyn.stored;
+
+                        decimal value = Convert.ToDecimal(valObj);
+                        int stored = Convert.ToInt32(storedObj);
+
+                        if (value > 0 && stored > 0)
+                        {
+                            levels.Add(new CashLevel
+                            {
+                                Value = value,
+                                Stored = stored
+                            });
+                        }
+                    }
+                    catch
+                    {
+                        // Если структура пришла в другом виде — пропускаем или логируем
+                        continue;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return "Ошибка разбора levels: " + ex.Message + " | Тип объекта: " + (levelsFrom1C?.GetType().FullName ?? "null");
+            }
+
+            if (levels.Count == 0)
+                return "Ошибка: не удалось извлечь ни одного уровня (value, stored)";
+
+            // --- Основная проверка ---
+            var result = PaymentChecker.CheckAllAmounts(levels, (decimal)maxAmount);
+            success = result.Success;
+
+            if (result.Success)
+                return "";
+
+            //return string.Join(";", result.Missing.Select(x => x.ToString("0.0")));
+            //return string.Join("; ", result.Missing.Select(x => x.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)));
+            return string.Join(";", result.Missing.Select(x => x.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
+
     }
 
+}
 
+public static class PaymentChecker
+{
+    /// <summary>
+    /// Проверяет, можно ли набрать все суммы от 0.50 до maxAmount грн с шагом 0.50
+    /// </summary>
+    /// <param name="levels">Остатки кассмашины</param>
+    /// <param name="maxAmount">Максимальная сумма в грн (по умолчанию 5000)</param>
+    /// <returns>
+    /// (success, missingAmounts) 
+    /// success = true, если все суммы достижимы
+    /// </returns>
+    public static (bool Success, List<decimal> Missing) CheckAllAmounts(
+      IEnumerable<CashLevel> levels,
+      decimal maxAmount = 5000m)
+    {
+        const int Scale = 100;   // копейки
+        const int Step = 50;     // 0.5 грн
+
+        int requestedMaxSum = (int)(maxAmount * Scale);
+        requestedMaxSum = (requestedMaxSum / Step) * Step; // выравниваем вниз
+
+        // Реальная сумма денег в кассе
+        long totalMoney = 0;
+        foreach (var lvl in levels)
+        {
+            int nom = (int)Math.Round(lvl.Value * Scale);
+            if (nom > 0 && lvl.Stored > 0)
+                totalMoney += (long)nom * lvl.Stored;
+        }
+
+        // DP делаем только до min(requested, totalMoney)
+        int dpMaxSum = (int)Math.Min(requestedMaxSum, totalMoney);
+        dpMaxSum = (dpMaxSum / Step) * Step;
+
+        int size = dpMaxSum / Step + 1;
+        bool[] dp = new bool[size];
+        if (size > 0) dp[0] = true;
+
+        // Binary Split
+        var virtualCoins = new List<int>();
+
+        foreach (var lvl in levels)
+        {
+            int nom = (int)Math.Round(lvl.Value * Scale);
+            int count = lvl.Stored;
+
+            if (nom <= 0 || count <= 0) continue;
+
+            int power = 1;
+            while (count > 0)
+            {
+                int take = Math.Min(power, count);
+                int virt = nom * take;
+
+                if (virt <= dpMaxSum && virt % Step == 0)
+                    virtualCoins.Add(virt);
+
+                count -= take;
+                power <<= 1;
+            }
+        }
+
+        // 0-1 рюкзак
+        foreach (int coin in virtualCoins)
+        {
+            int coinSteps = coin / Step;
+            for (int s = size - 1; s >= coinSteps; s--)
+            {
+                if (dp[s - coinSteps])
+                    dp[s] = true;
+            }
+        }
+
+        // Собираем недостающие на всём запрошенном диапазоне
+        var missing = new List<decimal>();
+
+        // 1. То, что не набралось внутри реальных денег
+        for (int i = 1; i < size; i++)
+        {
+            if (!dp[i])
+                missing.Add(i * 0.5m);
+        }
+
+        // 2. Всё, что выше реальной суммы денег — тоже недостающее
+        int firstMissingAbove = (dpMaxSum / Step) + 1;
+        int lastRequested = requestedMaxSum / Step;
+
+        for (int i = firstMissingAbove; i <= lastRequested; i++)
+        {
+            missing.Add(i * 0.5m);
+        }
+
+        return (missing.Count == 0, missing);
+    }
+
+    public class CashLevel
+        {
+            public decimal Value { get; set; }   // номинал в грн (например 0.5, 1, 2, 5...)
+            public int Stored { get; set; }      // количество
+        }
 
 }

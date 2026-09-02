@@ -1,8 +1,12 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using CTMOleClient;  // Твой namespace для ICTMWrapper, CTMWrapper
+﻿using CTMOleClient;  // Твой namespace для ICTMWrapper, CTMWrapper
 using CTMOnCSharp;   // Для enum: CTMBeginTransactionError, CTMEndTransactionResult
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;  // Для Process ID в ID
+using System.Linq;
+using static PaymentChecker;
+
 
 namespace CTMOleClient.Tests
 {
@@ -146,4 +150,241 @@ namespace CTMOleClient.Tests
 
 
     }
+
+    [TestClass]
+    public class PaymentCheckerTests
+    {
+        private void Log(string message)
+        {
+            Console.WriteLine($"[PaymentChecker {DateTime.Now:HH:mm:ss}] {message}");
+        }
+
+        private static List<CashLevel> CreateLevels(params (decimal value, int stored)[] items)
+        {
+            return items.Select(x => new CashLevel
+            {
+                Value = x.value,
+                Stored = x.stored
+            }).ToList();
+        }
+
+        [TestMethod]
+        public void CheckAllAmounts_AllAchievable_ReturnsSuccess()
+        {
+            Log("AllAchievable: Starting...");
+
+            var levels = CreateLevels(
+                (0.5m, 200),
+                (1.0m, 100),
+                (2.0m, 50),
+                (5.0m, 30),
+                (10.0m, 20)
+            );
+
+            var result = PaymentChecker.CheckAllAmounts(levels, 150m);
+
+            Assert.IsTrue(result.Success, "Все суммы должны быть достижимы");
+            Assert.AreEqual(0, result.Missing.Count);
+
+            Log("SUCCESS");
+        }
+
+        [TestMethod]
+        public void CheckAllAmounts_OnlyLargeBills_HasMissing()
+        {
+            Log("OnlyLargeBills: Starting...");
+
+            var levels = CreateLevels(
+                (10.0m, 15),
+                (20.0m, 10),
+                (50.0m, 5)
+            );
+
+            var result = PaymentChecker.CheckAllAmounts(levels, 100m);
+
+            Assert.IsFalse(result.Success);
+            Assert.IsTrue(result.Missing.Count > 0);
+
+            Assert.IsTrue(result.Missing.Contains(0.5m));
+            Assert.IsTrue(result.Missing.Contains(1.0m));
+            Assert.IsTrue(result.Missing.Contains(5.0m));
+            Assert.IsFalse(result.Missing.Contains(10.0m));
+            Assert.IsFalse(result.Missing.Contains(20.0m));
+
+            Log($"Missing count: {result.Missing.Count}");
+            Log("SUCCESS");
+        }
+
+        [TestMethod]
+        public void CheckAllAmounts_EmptyLevels_AllMissing()
+        {
+            Log("EmptyLevels: Starting...");
+
+            var levels = new List<CashLevel>();
+
+            var result = PaymentChecker.CheckAllAmounts(levels, 5.0m);
+
+            Assert.IsFalse(result.Success);
+            Assert.AreEqual(10, result.Missing.Count); // 0.5 ... 5.0
+            Assert.AreEqual(0.5m, result.Missing.First());
+            Assert.AreEqual(5.0m, result.Missing.Last());
+
+            Log("SUCCESS");
+        }
+
+        [TestMethod]
+        public void CheckAllAmounts_ZeroCounts_Ignored()
+        {
+            Log("ZeroCounts: Starting...");
+
+            var levels = CreateLevels(
+                (0.5m, 0),
+                (1.0m, 0),
+                (2.0m, 0),
+                (5.0m, 8)
+            );
+
+            var result = PaymentChecker.CheckAllAmounts(levels, 20m);
+
+            Assert.IsFalse(result.Success);
+            Assert.IsTrue(result.Missing.Contains(0.5m));
+            Assert.IsTrue(result.Missing.Contains(1.0m));
+            Assert.IsFalse(result.Missing.Contains(5.0m));
+            Assert.IsFalse(result.Missing.Contains(10.0m));
+
+            Log("SUCCESS");
+        }
+
+
+        [TestMethod]
+        public void CheckAllAmounts_LimitedByTotalMoney()
+        {
+            Log("LimitedByTotalMoney: Starting...");
+
+            // Всего денег только 7.5 грн
+            var levels = CreateLevels(
+                (0.5m, 5),   // 2.5
+                (1.0m, 5)    // 5.0  → итого 7.5
+            );
+
+            var result = PaymentChecker.CheckAllAmounts(levels, 100m);
+
+            // Теперь метод всегда проверяет полный диапазон,
+            // поэтому Success = false, а всё что выше 7.5 — в missing
+            Assert.IsFalse(result.Success, "Выше реальной суммы денег должны быть недостающие");
+
+            // До 7.5 всё должно быть достижимо
+            Assert.IsFalse(result.Missing.Contains(0.5m));
+            Assert.IsFalse(result.Missing.Contains(1.0m));
+            Assert.IsFalse(result.Missing.Contains(2.5m));
+            Assert.IsFalse(result.Missing.Contains(7.0m));
+            Assert.IsFalse(result.Missing.Contains(7.5m));
+
+            // Выше 7.5 — недостающие
+            Assert.IsTrue(result.Missing.Contains(8.0m));
+            Assert.IsTrue(result.Missing.Contains(10.0m));
+            Assert.IsTrue(result.Missing.Contains(100.0m));
+
+            Log($"Missing count: {result.Missing.Count}");
+            Log("SUCCESS");
+        }
+
+  
+        [TestMethod]
+        public void CheckAllAmounts_BinarySplit_LargeCount()
+        {
+            Log("BinarySplit LargeCount: Starting...");
+
+            var levels = CreateLevels(
+                (0.5m, 30000)
+            );
+
+            var result = PaymentChecker.CheckAllAmounts(levels, 1000m);
+
+            Assert.IsTrue(result.Success);
+            Assert.AreEqual(0, result.Missing.Count);
+
+            Log("SUCCESS");
+        }
+
+        [TestMethod]
+        public void CheckAllAmounts_ClassicGaps_2and5()
+        {
+            Log("ClassicGaps 2+5: Starting...");
+
+            var levels = CreateLevels(
+                (2.0m, 15),
+                (5.0m, 10)
+            );
+
+            var result = PaymentChecker.CheckAllAmounts(levels, 30m);
+
+            Assert.IsFalse(result.Success);
+
+            Assert.IsTrue(result.Missing.Contains(0.5m));
+            Assert.IsTrue(result.Missing.Contains(1.0m));
+            Assert.IsTrue(result.Missing.Contains(3.0m));
+            Assert.IsFalse(result.Missing.Contains(2.0m));
+            Assert.IsFalse(result.Missing.Contains(4.0m));
+            Assert.IsFalse(result.Missing.Contains(5.0m));
+            Assert.IsFalse(result.Missing.Contains(6.0m));
+            Assert.IsFalse(result.Missing.Contains(7.0m));
+
+            Log($"Missing count: {result.Missing.Count}");
+            Log("SUCCESS");
+        }
+
+        [TestMethod]
+        public void CheckAllAmounts_SingleHalfHryvnia()
+        {
+            Log("Single 0.5: Starting...");
+
+            var levels = CreateLevels(
+                (0.5m, 1)
+            );
+
+            var result = PaymentChecker.CheckAllAmounts(levels, 2.0m);
+
+            Assert.IsFalse(result.Success);
+            Assert.IsFalse(result.Missing.Contains(0.5m)); // 0.5 должна быть
+            Assert.IsTrue(result.Missing.Contains(1.0m));
+            Assert.IsTrue(result.Missing.Contains(1.5m));
+            Assert.IsTrue(result.Missing.Contains(2.0m));
+
+            Log("SUCCESS");
+        }
+
+        [TestMethod]
+        public void CheckAllAmounts_MaxAmount999()
+        {
+            Log("MaxAmount 999: Starting...");
+
+            var levels = CreateLevels(
+                (0.5m, 80),
+                (1.0m, 60),
+                (2.0m, 40),
+                (5.0m, 25),
+                (10.0m, 15),
+                (20.0m, 10),
+                (50.0m, 8),
+                (100.0m, 5),
+                (200.0m, 3),
+                (500.0m, 2)
+            );
+
+            var result = PaymentChecker.CheckAllAmounts(levels, 999m);
+
+            Log($"Success: {result.Success}, Missing: {result.Missing.Count}");
+
+            if (result.Missing.Count > 0)
+            {
+                Log("First 10 missing: " + string.Join(", ", result.Missing.Take(10)));
+            }
+
+            // Информационный тест
+            Assert.IsNotNull(result.Missing);
+        }
+    }
+
+
 }

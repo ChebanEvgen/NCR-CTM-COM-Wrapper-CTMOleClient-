@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CTMOleClient", "CTMOleClien
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CTMOleClient.Tests", "CTMOleClient.Tests\CTMOleClient.Tests.csproj", "{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}"
 EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "CTMOleClientSetup", "CTMOleClientSetup\CTMOleClientSetup.vdproj", "{474C283B-4AA9-0753-A120-E38FE98D8495}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -31,6 +33,10 @@ Global
 		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Release|Any CPU.Build.0 = Release|Any CPU
 		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Release|x86.ActiveCfg = Release|Any CPU
 		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Release|x86.Build.0 = Release|Any CPU
+		{474C283B-4AA9-0753-A120-E38FE98D8495}.Debug|Any CPU.ActiveCfg = Debug
+		{474C283B-4AA9-0753-A120-E38FE98D8495}.Debug|x86.ActiveCfg = Debug
+		{474C283B-4AA9-0753-A120-E38FE98D8495}.Release|Any CPU.ActiveCfg = Release
+		{474C283B-4AA9-0753-A120-E38FE98D8495}.Release|x86.ActiveCfg = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
