@@ -1,0 +1,765 @@
+[1mdiff --git a/CTMOleClient.Tests/CTMWrapperTransactionTests.cs b/CTMOleClient.Tests/CTMWrapperTransactionTests.cs[m
+[1mindex 3575491..5fb950b 100644[m
+[1m--- a/CTMOleClient.Tests/CTMWrapperTransactionTests.cs[m
+[1m+++ b/CTMOleClient.Tests/CTMWrapperTransactionTests.cs[m
+[36m@@ -1,8 +1,12 @@[m
+[31m-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;[m
+[31m-using System;[m
+[31m-using CTMOleClient;  // Твой namespace для ICTMWrapper, CTMWrapper[m
+[32m+[m[32m﻿using CTMOleClient;  // Твой namespace для ICTMWrapper, CTMWrapper[m
+ using CTMOnCSharp;   // Для enum: CTMBeginTransactionError, CTMEndTransactionResult[m
+[32m+[m[32musing Microsoft.VisualStudio.TestTools.UnitTesting;[m
+[32m+[m[32musing System;[m
+[32m+[m[32musing System.Collections.Generic;[m
+ using System.Diagnostics;  // Для Process ID в ID[m
+[32m+[m[32musing System.Linq;[m
+[32m+[m[32musing static PaymentChecker;[m
+[32m+[m
+ [m
+ namespace CTMOleClient.Tests[m
+ {[m
+[36m@@ -146,4 +150,241 @@[m [mnamespace CTMOleClient.Tests[m
+ [m
+ [m
+     }[m
+[32m+[m
+[32m+[m[32m    [TestClass][m
+[32m+[m[32m    public class PaymentCheckerTests[m
+[32m+[m[32m    {[m
+[32m+[m[32m        private void Log(string message)[m
+[32m+[m[32m        {[m
+[32m+[m[32m            Console.WriteLine($"[PaymentChecker {DateTime.Now:HH:mm:ss}] {message}");[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        private static List<CashLevel> CreateLevels(params (decimal value, int stored)[] items)[m
+[32m+[m[32m        {[m
+[32m+[m[32m            return items.Select(x => new CashLevel[m
+[32m+[m[32m            {[m
+[32m+[m[32m                Value = x.value,[m
+[32m+[m[32m                Stored = x.stored[m
+[32m+[m[32m            }).ToList();[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        [TestMethod][m
+[32m+[m[32m        public void CheckAllAmounts_AllAchievable_ReturnsSuccess()[m
+[32m+[m[32m        {[m
+[32m+[m[32m            Log("AllAchievable: Starting...");[m
+[32m+[m
+[32m+[m[32m            var levels = CreateLevels([m
+[32m+[m[32m                (0.5m, 200),[m
+[32m+[m[32m                (1.0m, 100),[m
+[32m+[m[32m                (2.0m, 50),[m
+[32m+[m[32m                (5.0m, 30),[m
+[32m+[m[32m                (10.0m, 20)[m
+[32m+[m[32m            );[m
+[32m+[m
+[32m+[m[32m            var result = PaymentChecker.CheckAllAmounts(levels, 150m);[m
+[32m+[m
+[32m+[m[32m            Assert.IsTrue(result.Success, "Все суммы должны быть достижимы");[m
+[32m+[m[32m            Assert.AreEqual(0, result.Missing.Count);[m
+[32m+[m
+[32m+[m[32m            Log("SUCCESS");[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        [TestMethod][m
+[32m+[m[32m        public void CheckAllAmounts_OnlyLargeBills_HasMissing()[m
+[32m+[m[32m        {[m
+[32m+[m[32m            Log("OnlyLargeBills: Starting...");[m
+[32m+[m
+[32m+[m[32m            var levels = CreateLevels([m
+[32m+[m[32m                (10.0m, 15),[m
+[32m+[m[32m                (20.0m, 10),[m
+[32m+[m[32m                (50.0m, 5)[m
+[32m+[m[32m            );[m
+[32m+[m
+[32m+[m[32m            var result = PaymentChecker.CheckAllAmounts(levels, 100m);[m
+[32m+[m
+[32m+[m[32m            Assert.IsFalse(result.Success);[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Count > 0);[m
+[32m+[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Contains(0.5m));[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Contains(1.0m));[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Contains(5.0m));[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(10.0m));[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(20.0m));[m
+[32m+[m
+[32m+[m[32m            Log($"Missing count: {result.Missing.Count}");[m
+[32m+[m[32m            Log("SUCCESS");[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        [TestMethod][m
+[32m+[m[32m        public void CheckAllAmounts_EmptyLevels_AllMissing()[m
+[32m+[m[32m        {[m
+[32m+[m[32m            Log("EmptyLevels: Starting...");[m
+[32m+[m
+[32m+[m[32m            var levels = new List<CashLevel>();[m
+[32m+[m
+[32m+[m[32m            var result = PaymentChecker.CheckAllAmounts(levels, 5.0m);[m
+[32m+[m
+[32m+[m[32m            Assert.IsFalse(result.Success);[m
+[32m+[m[32m            Assert.AreEqual(10, result.Missing.Count); // 0.5 ... 5.0[m
+[32m+[m[32m            Assert.AreEqual(0.5m, result.Missing.First());[m
+[32m+[m[32m            Assert.AreEqual(5.0m, result.Missing.Last());[m
+[32m+[m
+[32m+[m[32m            Log("SUCCESS");[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        [TestMethod][m
+[32m+[m[32m        public void CheckAllAmounts_ZeroCounts_Ignored()[m
+[32m+[m[32m        {[m
+[32m+[m[32m            Log("ZeroCounts: Starting...");[m
+[32m+[m
+[32m+[m[32m            var levels = CreateLevels([m
+[32m+[m[32m                (0.5m, 0),[m
+[32m+[m[32m                (1.0m, 0),[m
+[32m+[m[32m                (2.0m, 0),[m
+[32m+[m[32m                (5.0m, 8)[m
+[32m+[m[32m            );[m
+[32m+[m
+[32m+[m[32m            var result = PaymentChecker.CheckAllAmounts(levels, 20m);[m
+[32m+[m
+[32m+[m[32m            Assert.IsFalse(result.Success);[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Contains(0.5m));[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Contains(1.0m));[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(5.0m));[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(10.0m));[m
+[32m+[m
+[32m+[m[32m            Log("SUCCESS");[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m
+[32m+[m[32m        [TestMethod][m
+[32m+[m[32m        public void CheckAllAmounts_LimitedByTotalMoney()[m
+[32m+[m[32m        {[m
+[32m+[m[32m            Log("LimitedByTotalMoney: Starting...");[m
+[32m+[m
+[32m+[m[32m            // Всего денег только 7.5 грн[m
+[32m+[m[32m            var levels = CreateLevels([m
+[32m+[m[32m                (0.5m, 5),   // 2.5[m
+[32m+[m[32m                (1.0m, 5)    // 5.0  → итого 7.5[m
+[32m+[m[32m            );[m
+[32m+[m
+[32m+[m[32m            var result = PaymentChecker.CheckAllAmounts(levels, 100m);[m
+[32m+[m
+[32m+[m[32m            // Теперь метод всегда проверяет полный диапазон,[m
+[32m+[m[32m            // поэтому Success = false, а всё что выше 7.5 — в missing[m
+[32m+[m[32m            Assert.IsFalse(result.Success, "Выше реальной суммы денег должны быть недостающие");[m
+[32m+[m
+[32m+[m[32m            // До 7.5 всё должно быть достижимо[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(0.5m));[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(1.0m));[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(2.5m));[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(7.0m));[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(7.5m));[m
+[32m+[m
+[32m+[m[32m            // Выше 7.5 — недостающие[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Contains(8.0m));[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Contains(10.0m));[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Contains(100.0m));[m
+[32m+[m
+[32m+[m[32m            Log($"Missing count: {result.Missing.Count}");[m
+[32m+[m[32m            Log("SUCCESS");[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[41m  [m
+[32m+[m[32m        [TestMethod][m
+[32m+[m[32m        public void CheckAllAmounts_BinarySplit_LargeCount()[m
+[32m+[m[32m        {[m
+[32m+[m[32m            Log("BinarySplit LargeCount: Starting...");[m
+[32m+[m
+[32m+[m[32m            var levels = CreateLevels([m
+[32m+[m[32m                (0.5m, 30000)[m
+[32m+[m[32m            );[m
+[32m+[m
+[32m+[m[32m            var result = PaymentChecker.CheckAllAmounts(levels, 1000m);[m
+[32m+[m
+[32m+[m[32m            Assert.IsTrue(result.Success);[m
+[32m+[m[32m            Assert.AreEqual(0, result.Missing.Count);[m
+[32m+[m
+[32m+[m[32m            Log("SUCCESS");[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        [TestMethod][m
+[32m+[m[32m        public void CheckAllAmounts_ClassicGaps_2and5()[m
+[32m+[m[32m        {[m
+[32m+[m[32m            Log("ClassicGaps 2+5: Starting...");[m
+[32m+[m
+[32m+[m[32m            var levels = CreateLevels([m
+[32m+[m[32m                (2.0m, 15),[m
+[32m+[m[32m                (5.0m, 10)[m
+[32m+[m[32m            );[m
+[32m+[m
+[32m+[m[32m            var result = PaymentChecker.CheckAllAmounts(levels, 30m);[m
+[32m+[m
+[32m+[m[32m            Assert.IsFalse(result.Success);[m
+[32m+[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Contains(0.5m));[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Contains(1.0m));[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Contains(3.0m));[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(2.0m));[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(4.0m));[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(5.0m));[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(6.0m));[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(7.0m));[m
+[32m+[m
+[32m+[m[32m            Log($"Missing count: {result.Missing.Count}");[m
+[32m+[m[32m            Log("SUCCESS");[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        [TestMethod][m
+[32m+[m[32m        public void CheckAllAmounts_SingleHalfHryvnia()[m
+[32m+[m[32m        {[m
+[32m+[m[32m            Log("Single 0.5: Starting...");[m
+[32m+[m
+[32m+[m[32m            var levels = CreateLevels([m
+[32m+[m[32m                (0.5m, 1)[m
+[32m+[m[32m            );[m
+[32m+[m
+[32m+[m[32m            var result = PaymentChecker.CheckAllAmounts(levels, 2.0m);[m
+[32m+[m
+[32m+[m[32m            Assert.IsFalse(result.Success);[m
+[32m+[m[32m            Assert.IsFalse(result.Missing.Contains(0.5m)); // 0.5 должна быть[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Contains(1.0m));[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Contains(1.5m));[m
+[32m+[m[32m            Assert.IsTrue(result.Missing.Contains(2.0m));[m
+[32m+[m
+[32m+[m[32m            Log("SUCCESS");[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        [TestMethod][m
+[32m+[m[32m        public void CheckAllAmounts_MaxAmount999()[m
+[32m+[m[32m        {[m
+[32m+[m[32m            Log("MaxAmount 999: Starting...");[m
+[32m+[m
+[32m+[m[32m            var levels = CreateLevels([m
+[32m+[m[32m                (0.5m, 80),[m
+[32m+[m[32m                (1.0m, 60),[m
+[32m+[m[32m                (2.0m, 40),[m
+[32m+[m[32m                (5.0m, 25),[m
+[32m+[m[32m                (10.0m, 15),[m
+[32m+[m[32m                (20.0m, 10),[m
+[32m+[m[32m                (50.0m, 8),[m
+[32m+[m[32m                (100.0m, 5),[m
+[32m+[m[32m                (200.0m, 3),[m
+[32m+[m[32m                (500.0m, 2)[m
+[32m+[m[32m            );[m
+[32m+[m
+[32m+[m[32m            var result = PaymentChecker.CheckAllAmounts(levels, 999m);[m
+[32m+[m
+[32m+[m[32m            Log($"Success: {result.Success}, Missing: {result.Missing.Count}");[m
+[32m+[m
+[32m+[m[32m            if (result.Missing.Count > 0)[m
+[32m+[m[32m            {[m
+[32m+[m[32m                Log("First 10 missing: " + string.Join(", ", result.Missing.Take(10)));[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            // Информационный тест[m
+[32m+[m[32m            Assert.IsNotNull(result.Missing);[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m
+ }[m
+\ No newline at end of file[m
+[1mdiff --git a/CTMOleClient.sln b/CTMOleClient.sln[m
+[1mindex 169501f..40ac2e3 100644[m
+[1m--- a/CTMOleClient.sln[m
+[1m+++ b/CTMOleClient.sln[m
+[36m@@ -7,6 +7,8 @@[m [mProject("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CTMOleClient", "CTMOleClien[m
+ EndProject[m
+ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CTMOleClient.Tests", "CTMOleClient.Tests\CTMOleClient.Tests.csproj", "{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}"[m
+ EndProject[m
+[32m+[m[32mProject("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "CTMOleClientSetup", "CTMOleClientSetup\CTMOleClientSetup.vdproj", "{474C283B-4AA9-0753-A120-E38FE98D8495}"[m
+[32m+[m[32mEndProject[m
+ Global[m
+ 	GlobalSection(SolutionConfigurationPlatforms) = preSolution[m
+ 		Debug|Any CPU = Debug|Any CPU[m
+[36m@@ -31,6 +33,10 @@[m [mGlobal[m
+ 		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Release|Any CPU.Build.0 = Release|Any CPU[m
+ 		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Release|x86.ActiveCfg = Release|Any CPU[m
+ 		{5F10FE16-ECE9-4F63-A6D4-0E761619AEBE}.Release|x86.Build.0 = Release|Any CPU[m
+[32m+[m		[32m{474C283B-4AA9-0753-A120-E38FE98D8495}.Debug|Any CPU.ActiveCfg = Debug[m
+[32m+[m		[32m{474C283B-4AA9-0753-A120-E38FE98D8495}.Debug|x86.ActiveCfg = Debug[m
+[32m+[m		[32m{474C283B-4AA9-0753-A120-E38FE98D8495}.Release|Any CPU.ActiveCfg = Release[m
+[32m+[m		[32m{474C283B-4AA9-0753-A120-E38FE98D8495}.Release|x86.ActiveCfg = Release[m
+ 	EndGlobalSection[m
+ 	GlobalSection(SolutionProperties) = preSolution[m
+ 		HideSolutionNode = FALSE[m
+[1mdiff --git a/CTMOleClient/CTMOleClient.csproj b/CTMOleClient/CTMOleClient.csproj[m
+[1mindex eccb023..cdaf0f6 100644[m
+[1m--- a/CTMOleClient/CTMOleClient.csproj[m
+[1m+++ b/CTMOleClient/CTMOleClient.csproj[m
+[36m@@ -71,5 +71,13 @@[m
+     <Compile Include="Utils.cs" />[m
+     <Compile Include="Wrappers.cs" />[m
+   </ItemGroup>[m
+[32m+[m	[32m<ItemGroup>[m
+[32m+[m		[32m<Content Include="dll\**\*.*">[m
+[32m+[m			[32m<Link>%(Filename)%(Extension)</Link>[m
+[32m+[m			[32m<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>[m
+[32m+[m		[32m</Content>[m
+[32m+[m	[32m</ItemGroup>[m
+[32m+[m[41m	[m
+[32m+[m[41m	[m
+   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />[m
+ </Project>[m
+\ No newline at end of file[m
+[1mdiff --git a/CTMOleClient/CTMWrapper.cs b/CTMOleClient/CTMWrapper.cs[m
+[1mindex da16ba8..7317603 100644[m
+[1m--- a/CTMOleClient/CTMWrapper.cs[m
+[1m+++ b/CTMOleClient/CTMWrapper.cs[m
+[36m@@ -4,11 +4,14 @@[m [musing System.Collections;[m
+ using System.Collections.Generic;[m
+ using System.Globalization;[m
+ using System.IO;[m
+[32m+[m[32musing System.Linq;[m
+ using System.Reflection;[m
+ using System.Runtime.InteropServices;[m
+ using System.Text;[m
+ using System.Threading;[m
+ [m
+[32m+[m[32musing static PaymentChecker;[m
+[32m+[m
+ [m
+ namespace CTMOleClient[m
+ {[m
+[36m@@ -46,7 +49,7 @@[m [mnamespace CTMOleClient[m
+ [m
+         object TransferAllToCashbox();[m
+         object TransferAllNotesToCashbox_old();[m
+[31m-        object TransferFromBinToCashbox(object cashUnitsObj);  [m
+[32m+[m[32m        object TransferFromBinToCashbox(object cashUnitsObj);[m
+ [m
+         CTMResetCountsResult ResetDispensableCoinCounts();[m
+         CTMResetCountsResult ResetNonDispensableCoinCounts();[m
+[36m@@ -57,6 +60,8 @@[m [mnamespace CTMOleClient[m
+         object TransferAllNotesToCashbox();[m
+         object DispenseCashByDenomination(object cashUnitsObj);[m
+ [m
+[32m+[m[32m        string CheckAllPayments(object levelsFrom1C, double maxAmount, out bool success);[m
+[32m+[m
+     }[m
+ [m
+ [m
+[36m@@ -75,7 +80,7 @@[m [mnamespace CTMOleClient[m
+         private string _clientId = "";[m
+ [m
+ [m
+[31m-        public CTMWrapper() : base() {}[m
+[32m+[m[32m        public CTMWrapper() : base() { }[m
+ [m
+         private CtmCClient.OnDeviceErrorCallBack _deviceErrorCallback;[m
+         private CtmCClient.OnCashAcceptCallBack _cashAcceptCallback;[m
+[36m@@ -95,23 +100,23 @@[m [mnamespace CTMOleClient[m
+         public override void Init(object pConnection)[m
+         {[m
+             LogToFile("Init: called.");[m
+[31m-            SetConnection(pConnection);  [m
+[32m+[m[32m            SetConnection(pConnection);[m
+         }[m
+ [m
+         public void SetConnection(object pConnection)[m
+         {[m
+             _oneCObject = pConnection;  // This is the 1C form object[m
+             _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();[m
+[31m-            LogToFile($"SetConnection: UI Context captured for 1C 8.2 form ({_uiContext.GetType().Name}).");[m
+[32m+[m[32m            LogToFile($"SetConnection: UI Context captured for 1C 8.3 form ({_uiContext.GetType().Name}).");[m
+         }[m
+ [m
+         public override void Done()[m
+         {[m
+[31m-            _uiContext = null;  [m
+[31m-            GC.Collect();       [m
+[32m+[m[32m            _uiContext = null;[m
+[32m+[m[32m            GC.Collect();[m
+             GC.WaitForPendingFinalizers();[m
+ [m
+[31m-            base.Done();  [m
+[32m+[m[32m            base.Done();[m
+             LogToFile("Done: UI Context freed and finalizers executed.");[m
+         }[m
+ [m
+[36m@@ -141,7 +146,11 @@[m [mnamespace CTMOleClient[m
+ [m
+         public bool Initialize(string clientId, string overrideHost = null, string overridePort = null)[m
+         {[m
+[31m-            LogToFile($"Initialize: called with clientId='{clientId}', overrideHost='{overrideHost ?? "null"}', overridePort='{overridePort ?? "null"}'.");            try[m
+[32m+[m[32m            string assemblyVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString();[m
+[32m+[m[32m            string buildTime = System.IO.File.GetLastWriteTime(typeof(CTMWrapper).Assembly.Location).ToString("yyyy-MM-dd HH:mm:ss");[m
+[32m+[m
+[32m+[m[32m            LogToFile($"--- INITIALIZE CALLED --- Assembly Version: {assemblyVersion}, Build Time: {buildTime}");[m
+[32m+[m[32m            LogToFile($"Initialize: called with clientId='{clientId}', overrideHost='{overrideHost ?? "null"}', overridePort='{overridePort ?? "null"}'."); try[m
+             {[m
+                 _lastError = "";[m
+                 string serviceLocation = overrideHost ?? "localhost";[m
+[36m@@ -175,14 +184,14 @@[m [mnamespace CTMOleClient[m
+             LogToFile("Uninitialize: called.");[m
+             try[m
+             {[m
+[31m-                UnadviseEvents();  [m
+[31m-                CtmCClient.Uninitialize();  [m
+[32m+[m[32m                UnadviseEvents();[m
+[32m+[m[32m                CtmCClient.Uninitialize();[m
+                 _lastError = "Uninitialized";[m
+                 _uiContext = null;[m
+ [m
+                 GC.Collect();[m
+                 GC.WaitForPendingFinalizers();[m
+[31m-                GC.Collect();  [m
+[32m+[m[32m                GC.Collect();[m
+ [m
+                 LogToFile("Uninitialize: Complete, handlers freed, GC done.");[m
+             }[m
+[36m@@ -234,7 +243,7 @@[m [mnamespace CTMOleClient[m
+                 return string.Empty;[m
+             }[m
+         }[m
+[31m-        [m
+[32m+[m
+         public object GetFullConfig()[m
+         {[m
+             LogToFile("GetFullConfig: called.");[m
+[36m@@ -321,10 +330,10 @@[m [mnamespace CTMOleClient[m
+                 var result = CtmCClient.EndCustomerTransaction(actualTxnId);  // Вызов DLL[m
+                 LogToFile($"EndCustomer raw result: {result} (int: {(int)result})");[m
+ [m
+[31m-                bool success = (result == CTMEndTransactionResult.CTM_END_TRX_SUCCESS) ;  [m
+[32m+[m[32m                bool success = (result == CTMEndTransactionResult.CTM_END_TRX_SUCCESS);[m
+ [m
+[31m-                _lastError = success ? "OK" : result.ToString(); [m
+[31m-                _customerTxnId = string.Empty;  [m
+[32m+[m[32m                _lastError = success ? "OK" : result.ToString();[m
+[32m+[m[32m                _customerTxnId = string.Empty;[m
+ [m
+                 if (!success)[m
+                 {[m
+[36m@@ -342,7 +351,7 @@[m [mnamespace CTMOleClient[m
+                 return false;[m
+             }[m
+         }[m
+[31m-   [m
+[32m+[m
+         public bool AcceptCash(int amount)[m
+         {[m
+             LogToFile($"AcceptCash: requested amount={amount}.");[m
+[36m@@ -386,7 +395,7 @@[m [mnamespace CTMOleClient[m
+                     {[m
+                         Denomination = unit.denomination,[m
+                         Count = unit.count,[m
+[31m-                        CurrencyCode = "USD",  [m
+[32m+[m[32m                        CurrencyCode = "USD",[m
+                         Type = (int)unit.type[m
+                     };[m
+                     dispenseResult.DispensedUnits.Add(cashUnit);[m
+[36m@@ -426,21 +435,21 @@[m [mnamespace CTMOleClient[m
+                 {[m
+                     _lastError = result.error.ToString();[m
+                     LogToFile($"GetDispensableCashCounts: error {result.error} — return empty list.");[m
+[31m-                    return new ArrayList();   [m
+[32m+[m[32m                    return new ArrayList();[m
+                 }[m
+             }[m
+             catch (Exception ex)[m
+             {[m
+                 _lastError = ex.Message;[m
+                 LogToFile($"GetDispensableCashCounts: EXCEPTION {ex.Message}");[m
+[31m-                return new ArrayList();   [m
+[32m+[m[32m                return new ArrayList();[m
+             }[m
+         }[m
+ [m
+         public ArrayList GetNonDispensableCashCounts_old()[m
+         {[m
+             LogToFile("GetNonDispensableCashCounts: called.");[m
+[31m-           [m
+[32m+[m
+             var list = new ArrayList();[m
+             CTMCashUnitSet cashUnitSet = new CTMCashUnitSet();  // Для ref в finally[m
+             try[m
+[36m@@ -548,7 +557,7 @@[m [mnamespace CTMOleClient[m
+                 return new ArrayList();[m
+             }[m
+         }[m
+[31m-       [m
+[32m+[m
+         public void AdviseEvents()[m
+         {[m
+             LogToFile("AdviseEvents: called.");[m
+[36m@@ -593,7 +602,7 @@[m [mnamespace CTMOleClient[m
+                 }[m
+                 if (_authenticationCallback != null)[m
+                 {[m
+[31m-                    CtmCClient.RemoveAuthenticationEventHandler(_authenticationCallback); [m
+[32m+[m[32m                    CtmCClient.RemoveAuthenticationEventHandler(_authenticationCallback);[m
+                     _authenticationCallback = null;[m
+                 }[m
+                 if (_cmClosedCallback != null)[m
+[36m@@ -638,7 +647,7 @@[m [mnamespace CTMOleClient[m
+ [m
+             CtmCClient.AddSocketClosedEventHandler(_socketClosedCallback);[m
+             LogToFile("SocketClosed handler added.");[m
+[31m-             [m
+[32m+[m
+             CtmCClient.AddChangeContextEventHandler(_changeContextCallback);[m
+             LogToFile("ChangeContext handler added.");[m
+ [m
+[36m@@ -664,7 +673,7 @@[m [mnamespace CTMOleClient[m
+             CtmCClient.RemoveChangeContextEventHandler(_changeContextCallback);[m
+             CtmCClient.RemoveAuthenticationEventHandler(_authenticationCallback);[m
+             CtmCClient.RemoveCMClosedEventHandler(_cmClosedCallback);[m
+[31m-            [m
+[32m+[m
+             _eventsEnabled = false;[m
+             LogToFile("✓ All callbacks unregistered");[m
+         }[m
+[36m@@ -686,13 +695,17 @@[m [mnamespace CTMOleClient[m
+                 uint amount = acceptEvent.amount;[m
+                 uint amountDue = acceptEvent.amountDue;[m
+                 int denom = acceptEvent.cashUnit.denomination;[m
+[32m+[m[32m                int type = (acceptEvent.cashUnit.type == CTMCashType.CTM_CASH_TYPE_NOTE) ? 0 : 1;[m
+[32m+[m[32m                // int type = (int) acceptEvent.cashUnit.type;[m
+[32m+[m
+                 string curr = acceptEvent.cashUnit.currencyCode ?? "USD";[m
+ [m
+                 LogToFile($"CashAccept: Принято: {amount} {curr}, Сумма: {denom}, Итого: {amountDue}");[m
+ [m
+                 if (_eventsEnabled && _uiContext != null && _oneCObject != null)[m
+                 {[m
+[31m-                    object[] params1C = { (int)amount, (int)amountDue, denom, curr };[m
+[32m+[m[32m                    object[] params1C = { (int)amount, (int)amountDue, denom, curr, type };[m
+[32m+[m[32m                    //object[] params1C = { (int)amount, (int)amountDue, denom, curr };[m
+                     _uiContext.Post(_ => InvokeOneCEvent("OnCashAccept", params1C), null);[m
+                 }[m
+             }[m
+[36m@@ -730,14 +743,14 @@[m [mnamespace CTMOleClient[m
+             string logInfo = $"DeviceStatus: Type={statusObj.DeviceType}, ID={statusObj.DeviceId}, Model={statusObj.DeviceModel}, Status={statusObj.Status} ";[m
+             LogToFile(logInfo);[m
+             _deviceStatuses[deviceStatus.deviceInfo.deviceType] = deviceStatus.status;[m
+[31m-             LogToFile($"Device {deviceStatus.deviceInfo.deviceType} status updated: {deviceStatus.status} (ready if >0)");[m
+[32m+[m[32m            LogToFile($"Device {deviceStatus.deviceInfo.deviceType} status updated: {deviceStatus.status} (ready if >0)");[m
+             if (_eventsEnabled && _uiContext != null)[m
+             {[m
+                 _uiContext.Post(_ => InvokeOneCEvent("OnDeviceStatus", new object[] { statusObj }), null);[m
+             }[m
+ [m
+ [m
+[31m-     [m
+[32m+[m
+         }[m
+ [m
+         private void HandleSocketClosed(CTMEventInfo evtInfo)[m
+[36m@@ -816,11 +829,11 @@[m [mnamespace CTMOleClient[m
+ [m
+         private void LogToFile(string message)[m
+         {[m
+[31m-            if (string.IsNullOrEmpty(_logPath)) return; [m
+[32m+[m[32m            if (string.IsNullOrEmpty(_logPath)) return;[m
+ [m
+             try[m
+             {[m
+[31m-              [m
+[32m+[m
+                 Directory.CreateDirectory(Path.GetDirectoryName(_logPath));[m
+                 File.AppendAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");[m
+             }[m
+[36m@@ -840,7 +853,7 @@[m [mnamespace CTMOleClient[m
+ [m
+         public bool BeginCashManagementTransaction(string userId, string cashierId, out string txnId)[m
+         {[m
+[31m-            txnId = string.Empty;  [m
+[32m+[m[32m            txnId = string.Empty;[m
+             LogToFile($"BeginCashManagementTransaction: userId='{userId}', cashierId='{cashierId}'");[m
+ [m
+             try[m
+[36m@@ -873,7 +886,7 @@[m [mnamespace CTMOleClient[m
+                 return false;[m
+             }[m
+         }[m
+[31m-       [m
+[32m+[m
+         public bool EndCashManagementTransaction(string txnId)[m
+         {[m
+             LogToFile($"EndCashManagementTransaction: txnId='{txnId ?? _cmTxnId}'");[m
+[36m@@ -893,15 +906,15 @@[m [mnamespace CTMOleClient[m
+ [m
+                 if (result == CTMEndTransactionResult.CTM_END_TRX_SUCCESS)[m
+                 {[m
+[31m-                    _cmTxnId = "";  [m
+[32m+[m[32m                    _cmTxnId = "";[m
+                     LogToFile($"✓ CM Transaction ended: txnId={actualTxnId}");[m
+                     return true;[m
+                 }[m
+                 else if (result == CTMEndTransactionResult.CTM_END_TRX_ERROR_NO_TRANSACTION_IN_PROGRESS)[m
+                 {[m
+[31m-                    _cmTxnId = "";  [m
+[32m+[m[32m                    _cmTxnId = "";[m
+                     LogToFile($"✓ No active txn — graceful end: {actualTxnId}");[m
+[31m-                    return true; [m
+[32m+[m[32m                    return true;[m
+                 }[m
+                 else[m
+                 {[m
+[36m@@ -917,7 +930,7 @@[m [mnamespace CTMOleClient[m
+                 return false;[m
+             }[m
+         }[m
+[31m-       [m
+[32m+[m
+         public CTMAcceptCashRequestResult BeginRefill(int targetAmount = -1)[m
+         {[m
+             LogToFile($"BeginRefill: targetAmount={targetAmount} (CM txn: {_cmTxnId})");[m
+[36m@@ -925,7 +938,7 @@[m [mnamespace CTMOleClient[m
+             {[m
+                 if (string.IsNullOrEmpty(_cmTxnId)) { _lastError = "No active CM transaction"; return CTMAcceptCashRequestResult.CTM_ACCEPT_CASH_ERROR_NEEDS_OPEN_TRANSACTION_ID; }[m
+                 _lastError = "";[m
+[31m-                var result = CtmCClient.BeginRefill(targetAmount);  [m
+[32m+[m[32m                var result = CtmCClient.BeginRefill(targetAmount);[m
+                 if (result == CTMAcceptCashRequestResult.CTM_ACCEPT_CASH_SUCCESS)[m
+                 {[m
+                     LogToFile("Refill started: acceptors enabled");[m
+[36m@@ -987,7 +1000,7 @@[m [mnamespace CTMOleClient[m
+                 var result = CtmCClient.TransferAllFromLoaderToCashbox();[m
+                 var transferResult = new[m
+                 {[m
+[31m-                    Success = (result.error == CTMTransferCashError.CTM_TRANSFER_SUCCESS),  [m
+[32m+[m[32m                    Success = (result.error == CTMTransferCashError.CTM_TRANSFER_SUCCESS),[m
+                     TransferredAmount = result.transferredCash.transferredAmount,[m
+                     Error = result.error.ToString()[m
+                 };[m
+[36m@@ -1491,8 +1504,178 @@[m [mnamespace CTMOleClient[m
+                 GC.WaitForPendingFinalizers();[m
+             }[m
+         }[m
+[32m+[m
+[32m+[m
+[32m+[m[32m        public string CheckAllPayments(object levelsFrom1C, double maxAmount, out bool success)[m
+[32m+[m[32m        {[m
+[32m+[m[32m            success = false;[m
+[32m+[m[32m            var levels = new List<CashLevel>();[m
+[32m+[m
+[32m+[m[32m            try[m
+[32m+[m[32m            {[m
+[32m+[m[32m                if (levelsFrom1C == null)[m
+[32m+[m[32m                    return "Ошибка: levelsFrom1C = null";[m
+[32m+[m
+[32m+[m[32m                // --- Универсальный разбор того, что приходит из 1С ---[m
+[32m+[m[32m                IEnumerable enumerable = levelsFrom1C as IEnumerable;[m
+[32m+[m[32m                if (enumerable == null)[m
+[32m+[m[32m                    return "Ошибка: не удалось получить перечисление из levelsFrom1C. Тип: " + levelsFrom1C.GetType().FullName;[m
+[32m+[m
+[32m+[m[32m                foreach (object item in enumerable)[m
+[32m+[m[32m                {[m
+[32m+[m[32m                    if (item == null) continue;[m
+[32m+[m
+[32m+[m[32m                    try[m
+[32m+[m[32m                    {[m
+[32m+[m[32m                        dynamic dyn = item;[m
+[32m+[m
+[32m+[m[32m                        // Пробуем получить свойства value и stored[m
+[32m+[m[32m                        object valObj = dyn.value;[m
+[32m+[m[32m                        object storedObj = dyn.stored;[m
+[32m+[m
+[32m+[m[32m                        decimal value = Convert.ToDecimal(valObj);[m
+[32m+[m[32m                        int stored = Convert.ToInt32(storedObj);[m
+[32m+[m
+[32m+[m[32m                        if (value > 0 && stored > 0)[m
+[32m+[m[32m                        {[m
+[32m+[m[32m                            levels.Add(new CashLevel[m
+[32m+[m[32m                            {[m
+[32m+[m[32m                                Value = value,[m
+[32m+[m[32m                                Stored = stored[m
+[32m+[m[32m                            });[m
+[32m+[m[32m                        }[m
+[32m+[m[32m                    }[m
+[32m+[m[32m                    catch[m
+[32m+[m[32m                    {[m
+[32m+[m[32m                        // Если структура пришла в другом виде — пропускаем или логируем[m
+[32m+[m[32m                        continue;[m
+[32m+[m[32m                    }[m
+[32m+[m[32m                }[m
+[32m+[m[32m            }[m
+[32m+[m[32m            catch (Exception ex)[m
+[32m+[m[32m            {[m
+[32m+[m[32m                return "Ошибка разбора levels: " + ex.Message + " | Тип объекта: " + (levelsFrom1C?.GetType().FullName ?? "null");[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            if (levels.Count == 0)[m
+[32m+[m[32m                return "Ошибка: не удалось извлечь ни одного уровня (value, stored)";[m
+[32m+[m
+[32m+[m[32m            // --- Основная проверка ---[m
+[32m+[m[32m            var result = PaymentChecker.CheckAllAmounts(levels, (decimal)maxAmount);[m
+[32m+[m[32m            success = result.Success;[m
+[32m+[m
+[32m+[m[32m            if (result.Success)[m
+[32m+[m[32m                return "";[m
+[32m+[m
+[32m+[m[32m            //return string.Join(";", result.Missing.Select(x => x.ToString("0.0")));[m
+[32m+[m[32m            //return string.Join("; ", result.Missing.Select(x => x.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)));[m
+[32m+[m[32m            return string.Join(";", result.Missing.Select(x => x.ToString(System.Globalization.CultureInfo.InvariantCulture)));[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m
+     }[m
+ [m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mpublic static class PaymentChecker[m
+[32m+[m[32m{[m
+[32m+[m[32m    /// <summary>[m
+[32m+[m[32m    /// Проверяет, можно ли набрать все суммы от 0.50 до maxAmount грн с шагом 0.50[m
+[32m+[m[32m    /// </summary>[m
+[32m+[m[32m    /// <param name="levels">Остатки кассмашины</param>[m
+[32m+[m[32m    /// <param name="maxAmount">Максимальная сумма в грн (по умолчанию 5000)</param>[m
+[32m+[m[32m    /// <returns>[m
+[32m+[m[32m    /// (success, missingAmounts)[m[41m [m
+[32m+[m[32m    /// success = true, если все суммы достижимы[m
+[32m+[m[32m    /// </returns>[m
+[32m+[m[32m    public static (bool Success, List<decimal> Missing) CheckAllAmounts([m
+[32m+[m[32m      IEnumerable<CashLevel> levels,[m
+[32m+[m[32m      decimal maxAmount = 5000m)[m
+[32m+[m[32m    {[m
+[32m+[m[32m        const int Scale = 100;   // копейки[m
+[32m+[m[32m        const int Step = 50;     // 0.5 грн[m
+[32m+[m
+[32m+[m[32m        int requestedMaxSum = (int)(maxAmount * Scale);[m
+[32m+[m[32m        requestedMaxSum = (requestedMaxSum / Step) * Step; // выравниваем вниз[m
+[32m+[m
+[32m+[m[32m        // Реальная сумма денег в кассе[m
+[32m+[m[32m        long totalMoney = 0;[m
+[32m+[m[32m        foreach (var lvl in levels)[m
+[32m+[m[32m        {[m
+[32m+[m[32m            int nom = (int)Math.Round(lvl.Value * Scale);[m
+[32m+[m[32m            if (nom > 0 && lvl.Stored > 0)[m
+[32m+[m[32m                totalMoney += (long)nom * lvl.Stored;[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        // DP делаем только до min(requested, totalMoney)[m
+[32m+[m[32m        int dpMaxSum = (int)Math.Min(requestedMaxSum, totalMoney);[m
+[32m+[m[32m        dpMaxSum = (dpMaxSum / Step) * Step;[m
+[32m+[m
+[32m+[m[32m        int size = dpMaxSum / Step + 1;[m
+[32m+[m[32m        bool[] dp = new bool[size];[m
+[32m+[m[32m        if (size > 0) dp[0] = true;[m
+[32m+[m
+[32m+[m[32m        // Binary Split[m
+[32m+[m[32m        var virtualCoins = new List<int>();[m
+[32m+[m
+[32m+[m[32m        foreach (var lvl in levels)[m
+[32m+[m[32m        {[m
+[32m+[m[32m            int nom = (int)Math.Round(lvl.Value * Scale);[m
+[32m+[m[32m            int count = lvl.Stored;[m
+[32m+[m
+[32m+[m[32m            if (nom <= 0 || count <= 0) continue;[m
+[32m+[m
+[32m+[m[32m            int power = 1;[m
+[32m+[m[32m            while (count > 0)[m
+[32m+[m[32m            {[m
+[32m+[m[32m                int take = Math.Min(power, count);[m
+[32m+[m[32m                int virt = nom * take;[m
+[32m+[m
+[32m+[m[32m                if (virt <= dpMaxSum && virt % Step == 0)[m
+[32m+[m[32m                    virtualCoins.Add(virt);[m
+[32m+[m
+[32m+[m[32m                count -= take;[m
+[32m+[m[32m                power <<= 1;[m
+[32m+[m[32m       

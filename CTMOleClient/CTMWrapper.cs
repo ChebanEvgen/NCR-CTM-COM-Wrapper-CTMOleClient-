@@ -50,7 +50,7 @@ namespace CTMOleClient
         int TestAllDevices(out string errorDescription);
 
         object TransferAllToCashbox();
-        object TransferAllNotesToCashbox_old();
+      
         object TransferFromBinToCashbox(object cashUnitsObj);
 
         CTMResetCountsResult ResetDispensableCoinCounts();
@@ -478,68 +478,7 @@ namespace CTMOleClient
             }
         }
 
-        public ArrayList GetNonDispensableCashCounts_old()
-        {
-            LogToFile("GetNonDispensableCashCounts: called.");
 
-            var list = new ArrayList();
-            CTMCashUnitSet cashUnitSet = new CTMCashUnitSet();  // Для ref в finally
-            try
-            {
-                _lastError = "";
-                CTMGetCashCountsResult countsResult = CtmCClient.GetNonDispensableCashCounts();
-
-                if (countsResult.error != CTMGetCashCountsError.CTM_GET_CASH_COUNTS_SUCCESS)
-                {
-                    _lastError = countsResult.error.ToString();
-                    LogToFile($"GetNonDispensableCashCounts: error {countsResult.error} — return empty list.");
-                    return list;
-                }
-                cashUnitSet = countsResult.cashUnitSet;  // Сохрани для finally
-                IntPtr ptr = cashUnitSet.intPtr;
-                int size = Marshal.SizeOf(typeof(CTMCashUnit));
-                for (int i = 0; i < cashUnitSet.count; i++)
-                {
-                    IntPtr itemPtr = IntPtr.Add(ptr, i * size);
-                    CTMCashUnit unit = (CTMCashUnit)Marshal.PtrToStructure(itemPtr, typeof(CTMCashUnit));
-                    var info = new CashUnitInfo
-                    {
-                        Denomination = unit.denomination,
-                        Count = unit.count,
-                        Type = (int)unit.type, // 0 = COIN, 1 = NOTE
-                        CurrencyCode = unit.currencyCode ?? string.Empty
-                    };
-                    list.Add(info);
-                }
-                _lastError = "OK";
-                LogToFile($"GetNonDispensableCashCounts: returned {list.Count} items.");
-                return list;
-            }
-            catch (Exception ex)
-            {
-                _lastError = ex.Message;
-                LogToFile($"GetNonDispensableCashCounts: EXCEPTION {ex.Message}");
-                return list;
-            }
-            finally
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                LogToFile("GetNonDispensableCashCounts: GC.Collect called after free.");
-                try
-                {
-                    if (cashUnitSet.intPtr != IntPtr.Zero)
-                    {
-                        CtmCClient.FreeCashUnitSetContents(ref cashUnitSet);
-                        LogToFile("GetNonDispensableCashCounts: memory freed in finally.");
-                    }
-                }
-                catch (Exception freeEx)
-                {
-                    LogToFile($"GetNonDispensableCashCounts: free error in finally {freeEx.Message} — memory may leak.");
-                }
-            }
-        }
 
         public ArrayList GetNonDispensableCashCounts()
         {

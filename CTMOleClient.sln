@@ -37,6 +37,7 @@ Global
 		{474C283B-4AA9-0753-A120-E38FE98D8495}.Debug|x86.ActiveCfg = Debug
 		{474C283B-4AA9-0753-A120-E38FE98D8495}.Release|Any CPU.ActiveCfg = Release
 		{474C283B-4AA9-0753-A120-E38FE98D8495}.Release|x86.ActiveCfg = Release
+		{474C283B-4AA9-0753-A120-E38FE98D8495}.Release|x86.Build.0 = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
