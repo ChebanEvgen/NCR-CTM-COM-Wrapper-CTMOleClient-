@@ -1111,18 +1111,15 @@ namespace CTMOleClient
                 {
                     _lastError = "No active CM transaction";
                     LogToFile("✗ TransferFromBinToCashbox: No CM txn");
-                    var failResult = new TransferBinResult { Success = false, Error = _lastError };
-                    return failResult;
+                    return new TransferBinResult { Success = false, Error = _lastError };
                 }
 
                 ArrayList cashUnits = new ArrayList();
                 if (cashUnitsObj != null)
                 {
-                    // Итерация по COM-массиву/объекту (1C Массив как __ComObject)
                     dynamic comArray = cashUnitsObj;
                     foreach (dynamic item in comArray)
                     {
-                        // Читаем свойства через dynamic (без каста)
                         int denom = item.Denomination ?? 0;
                         int cnt = item.Count ?? 0;
                         string curr = item.CurrencyCode ?? "USD";
@@ -1141,60 +1138,68 @@ namespace CTMOleClient
                 {
                     _lastError = "Empty cashUnits after parsing";
                     LogToFile("✗ TransferFromBinToCashbox: No units after parse");
-                    var failResult = new TransferBinResult { Success = false, Error = _lastError };
-                    return failResult;
+                    return new TransferBinResult { Success = false, Error = _lastError };
                 }
 
-                // Создаём и заполняем CTMCashUnitSet (без изменений)
                 int count = cashUnits.Count;
                 int unitSize = Marshal.SizeOf(typeof(CTMCashUnit));
                 IntPtr ptr = Marshal.AllocHGlobal(count * unitSize);
-                CTMCashUnitSet unitSet = new CTMCashUnitSet { count = count, intPtr = ptr };
 
-                for (int i = 0; i < count; i++)
+                // Оборачиваем работу с неуправляемой памятью в try-finally
+                try
                 {
-                    var info = (CashUnitInfo)cashUnits[i];
-                    CTMCashUnit unit = new CTMCashUnit
+                    CTMCashUnitSet unitSet = new CTMCashUnitSet { count = count, intPtr = ptr };
+
+                    for (int i = 0; i < count; i++)
                     {
-                        type = (CTMCashType)info.Type,
-                        denomination = info.Denomination,
-                        count = info.Count,
-                        currencyCode = info.CurrencyCode ?? "USD"
+                        var info = (CashUnitInfo)cashUnits[i];
+                        CTMCashUnit unit = new CTMCashUnit
+                        {
+                            type = (CTMCashType)info.Type,
+                            denomination = info.Denomination,
+                            count = info.Count,
+                            currencyCode = info.CurrencyCode ?? "USD"
+                        };
+                        IntPtr unitPtr = IntPtr.Add(ptr, i * unitSize);
+                        Marshal.StructureToPtr(unit, unitPtr, false);
+                        LogToFile($"Unit {i}: type={unit.type}, denom={unit.denomination}, count={unit.count}");
+                    }
+
+                    _lastError = "";
+                    var result = CtmCClient.TransferFromBinToCashbox(unitSet);
+                    var transferResult = new TransferBinResult
+                    {
+                        Success = (result.error == CTMTransferCashError.CTM_TRANSFER_SUCCESS),
+                        TransferredAmount = result.transferredCash.transferredAmount,
+                        Error = result.error.ToString()
                     };
-                    IntPtr unitPtr = IntPtr.Add(ptr, i * unitSize);
-                    Marshal.StructureToPtr(unit, unitPtr, false);
-                    LogToFile($"Unit {i}: type={unit.type}, denom={unit.denomination}, count={unit.count}");
+
+                    if (transferResult.Success)
+                    {
+                        LogToFile($"✓ Transferred {transferResult.TransferredAmount} from bin to cashbox");
+                    }
+                    else
+                    {
+                        _lastError = transferResult.Error;
+                        LogToFile($"✗ TransferFromBinToCashbox failed: {result.error}");
+                    }
+
+                    return transferResult;
                 }
-
-                _lastError = "";
-                var result = CtmCClient.TransferFromBinToCashbox(unitSet);
-                var transferResult = new TransferBinResult
+                finally
                 {
-                    Success = (result.error == CTMTransferCashError.CTM_TRANSFER_SUCCESS),
-                    TransferredAmount = result.transferredCash.transferredAmount,
-                    Error = result.error.ToString()
-                };
-
-                Marshal.FreeHGlobal(ptr);
-
-                if (transferResult.Success)
-                {
-                    LogToFile($"✓ Transferred {transferResult.TransferredAmount} from bin to cashbox");
+                    // Память гарантированно освободится даже при ошибке/исключении
+                    if (ptr != IntPtr.Zero)
+                    {
+                        Marshal.FreeHGlobal(ptr);
+                    }
                 }
-                else
-                {
-                    _lastError = transferResult.Error;
-                    LogToFile($"✗ TransferFromBinToCashbox failed: {result.error}");
-                }
-
-                return transferResult;
             }
             catch (Exception ex)
             {
                 _lastError = ex.Message;
                 LogToFile($"EX in TransferFromBinToCashbox: {ex}");
-                var failResult = new TransferBinResult { Success = false, Error = _lastError };
-                return failResult;
+                return new TransferBinResult { Success = false, Error = _lastError };
             }
         }
 
@@ -1429,6 +1434,8 @@ namespace CTMOleClient
             LogToFile($"DispenseCashByDenomination: called with obj type={cashUnitsObj?.GetType().Name ?? "null"}");
             var dispenseResult = new DispenseCashResult();
             CTMDispenseCashResult nativeResult = new CTMDispenseCashResult();
+            IntPtr ptr = IntPtr.Zero; // Объявляем вне try, чтобы был доступ в finally
+
             try
             {
                 if (string.IsNullOrEmpty(_clientId))
@@ -1472,7 +1479,7 @@ namespace CTMOleClient
                 // Создаём и заполняем CTMCashUnitSet
                 int count = cashUnits.Count;
                 int unitSize = Marshal.SizeOf(typeof(CTMCashUnit));
-                IntPtr ptr = Marshal.AllocHGlobal(count * unitSize);
+                ptr = Marshal.AllocHGlobal(count * unitSize);
                 CTMCashUnitSet unitSet = new CTMCashUnitSet { count = count, intPtr = ptr };
                 for (int i = 0; i < count; i++)
                 {
@@ -1494,7 +1501,7 @@ namespace CTMOleClient
                 LogToFile($"DispenseCashByDenomination: Native result. Amount={nativeResult.amountDispensed}, Error={nativeResult.error}, Units count={nativeResult.cashUnitSet.count}");
 
                 dispenseResult.AmountDispensed = (int)nativeResult.amountDispensed;
-                dispenseResult.Success = (nativeResult.error == CTMDispenseCashError.CTM_DISPENSE_CASH_SUCCESS);  // Если enum не существует, замените на (nativeResult.error == 0)
+                dispenseResult.Success = (nativeResult.error == CTMDispenseCashError.CTM_DISPENSE_CASH_SUCCESS);
                 dispenseResult.Error = nativeResult.error.ToString();
 
                 if (dispenseResult.Success && nativeResult.cashUnitSet.count > 0)
@@ -1531,13 +1538,18 @@ namespace CTMOleClient
             }
             finally
             {
+                // 1. Освобождаем наш входной буфер
+                if (ptr != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(ptr);
+                }
+
+                // 2. Освобождаем память, которую вернула нативная DLL
                 if (nativeResult.cashUnitSet.intPtr != IntPtr.Zero)
                 {
                     CtmCClient.FreeCashUnitSetContents(ref nativeResult.cashUnitSet);
                     LogToFile("DispenseCashByDenomination: Memory freed.");
                 }
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
             }
         }
 
