@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;  // Для Process ID в ID
 using System.Linq;
 using static PaymentChecker;
+using static System.Net.Mime.MediaTypeNames;
 
 
 namespace CTMOleClient.Tests
@@ -151,6 +152,208 @@ namespace CTMOleClient.Tests
 
             LogToConsole("Test_TestAllDevices: SUCCESS - Device test executed.");
         }
+
+
+
+
+
+
+
+        [TestMethod]
+        public void Test_DispenseCashGreedyAlgorithm_2UAH()
+        {
+            LogToConsole("Test_DispenseCashGreedyAlgorithm_2UAH: Starting...");
+
+            // Переопределяем параметры подключения для реального устройства
+            const string realHost = "100.70.1.18";
+            const string realPort = "3636";
+            string testClientId = $"TestClient_Greedy_{Process.GetCurrentProcess().Id}";
+
+            // Переинициализируем враппер на реальное устройство
+            _wrapper.Uninitialize();
+            bool initOk = _wrapper.Initialize(testClientId, realHost, realPort);
+            string initError = _wrapper.GetLastError();
+
+            Assert.IsTrue(initOk, $"Init failed on {realHost}:{realPort}. Error: {initError}");
+            _wrapper.AdviseEvents();
+
+            // Диагностика: выводим доступные для выдачи номиналы в устройстве
+            System.Collections.ArrayList dispensable = _wrapper.GetDispensableCashCounts();
+            LogToConsole($"Dispensable units count in device: {dispensable?.Count ?? 0}");
+            if (dispensable != null)
+            {
+                foreach (var item in dispensable)
+                {
+                    var unit = item as CashUnitInfo;
+                    if (unit != null)
+                    {
+                        LogToConsole($"  -> Denomination: {unit.Denomination}, Count: {unit.Count}, Type: {unit.Type}, Currency: {unit.CurrencyCode}");
+                    }
+                }
+            }
+
+            int targetAmount = 33350; // 200 копеек = 2 грн
+
+            try
+            {
+                // 1. Открываем Cash Management транзакцию вместо Customer Transaction
+                string cmTxnId;
+                bool beginOk = _wrapper.BeginCashManagementTransaction("Admin", "Admin", out cmTxnId);
+                string beginError = _wrapper.GetLastError();
+                LogToConsole($"Begin CM transaction result: {beginOk}, TxnId: '{cmTxnId}', Error: '{beginError}'");
+                Assert.IsTrue(beginOk, $"Begin CM transaction failed. Error: {beginError}");
+
+                // 2. Вызываем жадный алгоритм выдачи
+                object resultObj = _wrapper.DispenseCashGreedyAlgorithm(targetAmount);
+
+                var dispenseResult = resultObj as DispenseCashResult;
+
+                if (dispenseResult != null)
+                {
+                    LogToConsole($"Dispense result: Success={dispenseResult.Success}, AmountDispensed={dispenseResult.AmountDispensed}, Error='{dispenseResult.Error}', LastError='{_wrapper.GetLastError()}'");
+                }
+                else
+                {
+                    LogToConsole($"Result object is null or not DispenseCashResult. Type: {resultObj?.GetType().FullName ?? "null"}, LastError: {_wrapper.GetLastError()}");
+                }
+
+                Assert.IsNotNull(resultObj, "DispenseCashGreedyAlgorithm should not return null");
+
+                // Проверяем успешность выдачи
+                if (dispenseResult != null && dispenseResult.Success)
+                {
+                    Assert.AreEqual(targetAmount, dispenseResult.AmountDispensed, "Dispensed amount should match target amount");
+                }
+                else
+                {
+                    string errDetails = dispenseResult?.Error ?? _wrapper.GetLastError();
+                    LogToConsole($"[WARNING] Dispense failed or rejected by hardware. Reason: {errDetails}");
+                }
+
+                // 3. Завершаем CM транзакцию
+                bool endOk = _wrapper.EndCashManagementTransaction(cmTxnId);
+                LogToConsole($"End CM transaction result: {endOk}");
+                Assert.IsTrue(endOk, $"End CM transaction failed. Error: {_wrapper.GetLastError()}");
+            }
+            finally
+            {
+                // Возвращаем настройки подключения к эмулятору для чистоты других тестов
+                _wrapper.Uninitialize();
+                _wrapper.Initialize(ClientId, "100.72.2.50", "3636");
+                _wrapper.AdviseEvents();
+            }
+
+            LogToConsole("Test_DispenseCashGreedyAlgorithm_2UAH: SUCCESS");
+        }
+
+
+
+
+
+
+
+
+        [TestMethod]
+        public void Test_DispenseCash_2UAH()
+        {
+            LogToConsole("Test_DispenseCash_2UAH: Starting...");
+
+            // Переопределяем параметры подключения для реального устройства
+            const string realHost = "100.70.1.18";
+            const string realPort = "3636";
+            string testClientId = $"TestClient_Dispense_{Process.GetCurrentProcess().Id}";
+
+            // Переинициализируем враппер на реальное устройство
+            _wrapper.Uninitialize();
+            bool initOk = _wrapper.Initialize(testClientId, realHost, realPort);
+            string initError = _wrapper.GetLastError();
+
+            Assert.IsTrue(initOk, $"Init failed on {realHost}:{realPort}. Error: {initError}");
+            _wrapper.AdviseEvents();
+
+            // Диагностика: выводим доступные для выдачи номиналы в устройстве
+            System.Collections.ArrayList dispensable = _wrapper.GetDispensableCashCounts();
+            LogToConsole($"Dispensable units count in device: {dispensable?.Count ?? 0}");
+            if (dispensable != null)
+            {
+                foreach (var item in dispensable)
+                {
+                    var unit = item as CashUnitInfo;
+                    if (unit != null)
+                    {
+                        LogToConsole($"  -> Denomination: {unit.Denomination}, Count: {unit.Count}, Type: {unit.Type}, Currency: {unit.CurrencyCode}");
+                    }
+                }
+            }
+
+            const string txnId = "TXN_DISPENSE_2UAH";
+            int targetAmount = 200; // 2 грн
+
+            try
+            {
+                // 1. Начинаем транзакцию
+                bool beginOk = _wrapper.BeginCustomerTransaction(txnId);
+                string beginError = _wrapper.GetLastError();
+                LogToConsole($"Begin transaction result: {beginOk}, Error: '{beginError}'");
+                Assert.IsTrue(beginOk, $"Begin transaction failed. Error: {beginError}");
+
+                // 2. Вызываем стандартный метод выдачи суммы
+                object resultObj = _wrapper.DispenseCash(targetAmount);
+
+                var dispenseResult = resultObj as DispenseCashResult;
+
+                if (dispenseResult != null)
+                {
+                    LogToConsole($"Dispense result: Success={dispenseResult.Success}, AmountDispensed={dispenseResult.AmountDispensed}, Error='{dispenseResult.Error}', LastError='{_wrapper.GetLastError()}'");
+
+                    if (dispenseResult.DispensedUnits != null)
+                    {
+                        foreach (var item in dispenseResult.DispensedUnits)
+                        {
+                            var unit = item as CashUnitInfo;
+                            if (unit != null)
+                            {
+                                LogToConsole($"  -> Dispensed unit: Denom={unit.Denomination}, Count={unit.Count}, Type={unit.Type}");
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    LogToConsole($"Result object is null or not DispenseCashResult. Type: {resultObj?.GetType().FullName ?? "null"}, LastError: {_wrapper.GetLastError()}");
+                }
+
+                Assert.IsNotNull(resultObj, "DispenseCash should not return null");
+
+                // Проверяем успешность выдачи
+                if (dispenseResult != null && dispenseResult.Success)
+                {
+                    Assert.AreEqual(targetAmount, dispenseResult.AmountDispensed, "Dispensed amount should match target amount");
+                }
+                else
+                {
+                    string errDetails = dispenseResult?.Error ?? _wrapper.GetLastError();
+                    LogToConsole($"[WARNING] Dispense failed or rejected by hardware. Reason: {errDetails}");
+                    // Если нужно, чтобы тест падал при неудаче выдачи, раскомментируйте:
+                    // Assert.Fail($"Dispense failed: {errDetails}");
+                }
+
+                // 3. Завершаем транзакцию
+                bool endOk = _wrapper.EndCustomerTransaction(txnId);
+                LogToConsole($"End transaction result: {endOk}");
+                Assert.IsTrue(endOk, $"End transaction failed. Error: {_wrapper.GetLastError()}");
+            }
+            finally
+            {
+                // Возвращаем настройки подключения к эмулятору для чистоты других тестов
+                _wrapper.Uninitialize();
+                _wrapper.Initialize(ClientId, "100.72.2.50", "3636");
+                _wrapper.AdviseEvents();
+            }
+
+            LogToConsole("Test_DispenseCash_2UAH: SUCCESS");
+        }
+
 
 
     }

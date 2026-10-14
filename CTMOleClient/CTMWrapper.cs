@@ -36,6 +36,7 @@ namespace CTMOleClient
         bool AcceptCash(int amount);
         bool StopAcceptingCash();
         object DispenseCash(int amount);
+        object DispenseCashGreedyAlgorithm(int targetAmount);
         ArrayList GetDispensableCashCounts();
         ArrayList GetNonDispensableCashCounts();
         void AdviseEvents();
@@ -61,6 +62,7 @@ namespace CTMOleClient
         object PurgeCoins(CTMPurgeCoinsLocation purgeCoinsLocation);
         object TransferAllNotesToCashbox();
         object DispenseCashByDenomination(object cashUnitsObj);
+
 
         string CheckAllPayments(object levelsFrom1C, double maxAmount, out bool success);
 
@@ -440,6 +442,172 @@ namespace CTMOleClient
             }
             return dispenseResult;
         }
+
+        public object DispenseCashGreedyAlgorithm(int targetAmount)
+        {
+            LogToFile($"DispenseCashGreedyAlgorithm: called for target amount={targetAmount}");
+            var dispenseResult = new DispenseCashResult();
+            CTMDispenseCashResult nativeResult = new CTMDispenseCashResult();
+            IntPtr ptr = IntPtr.Zero;
+
+            try
+            {
+                if (string.IsNullOrEmpty(_clientId))
+                {
+                    _lastError = "Not initialized";
+                    LogToFile("✗ DispenseCashGreedyAlgorithm: Not initialized");
+                    dispenseResult.Error = _lastError;
+                    dispenseResult.Success = false;
+                    return dispenseResult;
+                }
+
+                if (targetAmount <= 0)
+                {
+                    _lastError = "Target amount must be greater than zero";
+                    LogToFile($"✗ DispenseCashGreedyAlgorithm: {_lastError}");
+                    dispenseResult.Error = _lastError;
+                    dispenseResult.Success = false;
+                    return dispenseResult;
+                }
+
+                // 1. Получаем доступные остатки для выдачи
+                ArrayList dispensableCounts = GetDispensableCashCounts();
+                if (dispensableCounts == null || dispensableCounts.Count == 0)
+                {
+                    _lastError = "No dispensable cash counts available";
+                    LogToFile("✗ DispenseCashGreedyAlgorithm: No dispensable units found");
+                    dispenseResult.Error = _lastError;
+                    dispenseResult.Success = false;
+                    return dispenseResult;
+                }
+
+                // 2. Жадный алгоритм: сортируем по убыванию номинала
+                var sortedUnits = dispensableCounts
+                    .Cast<CashUnitInfo>()
+                    .Where(u => u.Denomination > 0 && u.Count > 0)
+                    .OrderByDescending(u => u.Denomination)
+                    .ToList();
+
+                int remainingAmount = targetAmount;
+                var plannedUnits = new List<CashUnitInfo>();
+
+                foreach (var unit in sortedUnits)
+                {
+                    if (remainingAmount <= 0) break;
+
+                    int denom = unit.Denomination;
+                    int availableCount = unit.Count;
+
+                    int neededCount = remainingAmount / denom;
+                    int takeCount = Math.Min(neededCount, availableCount);
+
+                    if (takeCount > 0)
+                    {
+                        plannedUnits.Add(new CashUnitInfo
+                        {
+                            Denomination = denom,
+                            Count = takeCount,
+                            CurrencyCode = unit.CurrencyCode ?? "UAH",
+                            Type = unit.Type
+                        });
+
+                        remainingAmount -= denom * takeCount;
+                        LogToFile($"Greedy plan: denom={denom}, taken={takeCount}, remaining={remainingAmount}");
+                    }
+                }
+
+                if (remainingAmount > 0)
+                {
+                    _lastError = $"Cannot dispense full amount greedily. Remaining: {remainingAmount}";
+                    LogToFile($"✗ DispenseCashGreedyAlgorithm: {_lastError}");
+                    dispenseResult.Error = _lastError;
+                    dispenseResult.Success = false;
+                    return dispenseResult;
+                }
+
+                // 3. Формируем пустой набор и заполняем через встроенную функцию DLL (или корректно через структуры)
+                // Так как мы создаем набор сами через AddCashUnitToCashUnitSet или AllocHGlobal:
+                int count = plannedUnits.Count;
+                int unitSize = Marshal.SizeOf(typeof(CTMCashUnit));
+                ptr = Marshal.AllocHGlobal(count * unitSize);
+
+                CTMCashUnitSet unitSet = new CTMCashUnitSet
+                {
+                    count = count,
+                    intPtr = ptr
+                };
+
+                for (int i = 0; i < count; i++)
+                {
+                    var info = plannedUnits[i];
+                    CTMCashUnit unit = new CTMCashUnit
+                    {
+                        type = (CTMCashType)info.Type,
+                        denomination = info.Denomination,
+                        count = info.Count,
+                        currencyCode = info.CurrencyCode ?? "UAH"
+                    };
+                    IntPtr unitPtr = IntPtr.Add(ptr, i * unitSize);
+                    Marshal.StructureToPtr(unit, unitPtr, false);
+                }
+
+                // 4. Вызываем нативный метод выдачи по номиналу[cite: 2]
+                _lastError = "";
+                nativeResult = CtmCClient.DispenseCashByDenomination(unitSet);
+
+                dispenseResult.AmountDispensed = (int)nativeResult.amountDispensed;
+                dispenseResult.Success = (nativeResult.error == CTMDispenseCashError.CTM_DISPENSE_CASH_SUCCESS);
+                dispenseResult.Error = nativeResult.error.ToString();
+
+                if (dispenseResult.Success && nativeResult.cashUnitSet.count > 0)
+                {
+                    IntPtr respPtr = nativeResult.cashUnitSet.intPtr;
+                    for (int i = 0; i < nativeResult.cashUnitSet.count; i++)
+                    {
+                        IntPtr itemPtr = IntPtr.Add(respPtr, i * unitSize);
+                        CTMCashUnit unit = (CTMCashUnit)Marshal.PtrToStructure(itemPtr, typeof(CTMCashUnit));
+                        CashUnitInfo info = new CashUnitInfo();
+                        info.FromUnmanaged(unit);
+                        dispenseResult.DispensedUnits.Add(info);
+                    }
+                }
+
+                return dispenseResult;
+            }
+            catch (Exception ex)
+            {
+                _lastError = ex.Message;
+                LogToFile($"EX in DispenseCashGreedyAlgorithm: {ex}");
+                dispenseResult.Error = _lastError;
+                dispenseResult.Success = false;
+                return dispenseResult;
+            }
+            finally
+            {
+                // Освобождаем только наш входной буфер, выделенный через Marshal.AllocHGlobal
+                if (ptr != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(ptr);
+                }
+
+                // ВАЖНО: Вызываем FreeCashUnitSetContents ТОЛЬКО для структуры, вернувшейся из DLL (nativeResult.cashUnitSet),
+                //так как память под неё выделялась на стороне нативной библиотеки.
+        if (nativeResult.cashUnitSet.intPtr != IntPtr.Zero)
+                {
+                    try
+                    {
+                        // Вызываем освобождение только если уверенны, что набор заполнен нативной библиотекой
+                        CtmCClient.FreeCashUnitSetContents(ref nativeResult.cashUnitSet);
+                    }
+                     catch (Exception ex)
+                    {
+                        LogToFile($"Error freeing nativeResult cashUnitSet: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+
 
         public ArrayList GetDispensableCashCounts()
         {
@@ -1238,6 +1406,7 @@ namespace CTMOleClient
                 return CTMResetCountsResult.CTM_RESET_COUNTS_UNHANDLED_EXCEPTION;
             }
         }
+
 
         public object PurgeCoins(CTMPurgeCoinsLocation purgeCoinsLocation)
         {
