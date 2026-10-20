@@ -28,13 +28,13 @@
         "Entry"
         {
         "MsmKey" = "8:_UNDEFINED"
-        "OwnerKey" = "8:_6DDDFC5D217ABC568211E011C3A0F19C"
+        "OwnerKey" = "8:_F5ABB7E7804F462293557AFFA306FFA5"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
         {
         "MsmKey" = "8:_UNDEFINED"
-        "OwnerKey" = "8:_F5ABB7E7804F462293557AFFA306FFA5"
+        "OwnerKey" = "8:_6DDDFC5D217ABC568211E011C3A0F19C"
         "MsmSig" = "8:_UNDEFINED"
         }
     }
@@ -219,15 +219,15 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:CTMOleClientSetup"
-        "ProductCode" = "8:{33878DEA-F12C-4038-B5D4-F350B5854955}"
-        "PackageCode" = "8:{7A25B46B-098F-4D33-BBEE-C45547601379}"
+        "ProductCode" = "8:{4B595B3D-7A51-4B5F-9882-04071A51F06D}"
+        "PackageCode" = "8:{43066E94-285F-43CB-ACD3-5C48DF39DAFD}"
         "UpgradeCode" = "8:{A5D55EF4-DDC7-44AB-9B5B-0DC9DFC54EE4}"
         "AspNetVersion" = "8:2.0.50727.0"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:FALSE"
-        "ProductVersion" = "8:1.0.20"
+        "ProductVersion" = "8:1.0.21"
         "Manufacturer" = "8:Kopiyka.kso"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"

@@ -117,8 +117,8 @@ namespace CTMOleClient
         public override void Done()
         {
             _uiContext = null;
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
+            //GC.Collect();
+            //GC.WaitForPendingFinalizers();
 
             base.Done();
             LogToFile("Done: UI Context freed and finalizers executed.");
@@ -1466,8 +1466,8 @@ namespace CTMOleClient
                     CtmCClient.FreeCashUnitSetContents(ref nativeResult.purgeCoinCounts);
                     LogToFile("PurgeCoins: Memory freed in finally.");
                 }
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
+               // GC.Collect();
+               // GC.WaitForPendingFinalizers();
             }
         }
 
@@ -1532,8 +1532,8 @@ namespace CTMOleClient
                     CtmCClient.FreeCashUnitSetContents(ref result.transferredCash.cashUnitSet);
                     LogToFile("TransferAllNotesToCashbox: Memory freed.");
                 }
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
+               // GC.Collect();
+               // GC.WaitForPendingFinalizers();
             }
         }
 
