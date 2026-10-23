@@ -9,6 +9,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 
 using static PaymentChecker;
 
@@ -80,8 +81,16 @@ namespace CTMOleClient
         private string _cmTxnId = string.Empty;
         private string _customerTxnId = string.Empty;
         private string _lastError = string.Empty;
-        private bool _eventsEnabled = false;
+        private volatile bool _eventsEnabled = false;
+        private bool _callbacksRegistered = false;
         private string _clientId = "";
+        private readonly object _oneCEventLifecycleSync = new object();
+
+        private OneCEventGate _oneCEventGate = new OneCEventGate();
+
+        private bool _oneCShutdownRequested = false;
+
+        private Task _oneCShutdownTask = null;
 
 
         public CTMWrapper() : base() { }
@@ -100,6 +109,181 @@ namespace CTMOleClient
 
 
 
+        [ComVisible(false)]
+        public Task ShutdownOneCEventsAsync()
+        {
+            lock (_oneCEventLifecycleSync)
+            {
+                _eventsEnabled = false;
+
+                if (!_oneCShutdownRequested)
+                {
+                    _oneCShutdownRequested = true;
+
+                    _oneCShutdownTask =
+                        _oneCEventGate.ShutdownAsync();
+                }
+
+                return _oneCShutdownTask;
+            }
+        }
+
+
+        [ComVisible(false)]
+        public void ResetOneCEvents()
+        {
+            lock (_oneCEventLifecycleSync)
+            {
+                if (!_oneCShutdownRequested)
+                {
+                    throw new InvalidOperationException(
+                        "ResetOneCEvents: shutdown was not requested.");
+                }
+
+                if (_oneCShutdownTask == null ||
+                    _oneCShutdownTask.Status != TaskStatus.RanToCompletion)
+                {
+                    throw new InvalidOperationException(
+                        "ResetOneCEvents: previous callbacks are still active.");
+                }
+
+                // Старый gate завершён.
+                // Создаём новый жизненный цикл событий.
+                _oneCEventGate = new OneCEventGate();
+
+                _oneCShutdownRequested = false;
+                _oneCShutdownTask = null;
+
+                _eventsEnabled = true;
+
+                LogToFile("ResetOneCEvents: new event gate created.");
+            }
+        }
+
+
+        private void PostOneCEvent(string eventName, object[] parameters)
+        {
+            SynchronizationContext context;
+            OneCEventGate gate;
+
+            lock (_oneCEventLifecycleSync)
+            {
+                if (!_eventsEnabled || _uiContext == null ||
+                    _oneCObject == null || _oneCShutdownRequested)
+                {
+                    return;
+                }
+
+                context = _uiContext;
+
+                // Фиксируем gate текущего жизненного цикла.
+                gate = _oneCEventGate;
+            }
+
+            try
+            {
+                context.Post(_ =>
+                {
+                    IDisposable lease = gate.TryEnter();
+
+                    if (lease == null)
+                    {
+                        LogToFile(
+                            "PostOneCEvent: old or stopped event " +
+                            eventName);
+                        return;
+                    }
+
+                    using (lease)
+                    {
+                        if (!_eventsEnabled || _oneCObject == null)
+                            return;
+
+                        InvokeOneCEvent(eventName, parameters);
+                    }
+
+                }, null);
+            }
+            catch (Exception ex)
+            {
+                LogToFile(
+                    "PostOneCEvent POST ERROR: " + ex.Message);
+            }
+        }
+
+
+
+        private sealed class OneCEventGate
+        {
+            private readonly object _sync = new object();
+
+            private bool _accepting = true;
+            private int _active;
+
+            private readonly TaskCompletionSource<bool> _completed =
+                new TaskCompletionSource<bool>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public IDisposable TryEnter()
+            {
+                lock (_sync)
+                {
+                    if (!_accepting)
+                        return null;
+
+                    _active++;
+                    return new Lease(this);
+                }
+            }
+
+            public Task ShutdownAsync()
+            {
+                lock (_sync)
+                {
+                    _accepting = false;
+
+                    if (_active == 0)
+                        _completed.TrySetResult(true);
+
+                    return _completed.Task;
+                }
+            }
+
+            private void Leave()
+            {
+                lock (_sync)
+                {
+                    _active--;
+
+                    if (_active < 0)
+                        throw new InvalidOperationException(
+                            "Negative active callback count.");
+
+                    if (!_accepting && _active == 0)
+                        _completed.TrySetResult(true);
+                }
+            }
+
+            private sealed class Lease : IDisposable
+            {
+                private OneCEventGate _owner;
+
+                public Lease(OneCEventGate owner)
+                {
+                    _owner = owner;
+                }
+
+                public void Dispose()
+                {
+                    OneCEventGate owner =
+                        Interlocked.Exchange(ref _owner, null);
+
+                    if (owner != null)
+                        owner.Leave();
+                }
+            }
+        }
+
 
         public override void Init(object pConnection)
         {
@@ -109,10 +293,19 @@ namespace CTMOleClient
 
         public void SetConnection(object pConnection)
         {
-            _oneCObject = pConnection;  // This is the 1C form object
-            _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
-            LogToFile($"SetConnection: UI Context captured for 1C 8.3 form ({_uiContext.GetType().Name}).");
+            _oneCObject = pConnection;
+
+            _uiContext = SynchronizationContext.Current;
+
+            LogToFile(
+                $"SetConnection: ThreadId={Thread.CurrentThread.ManagedThreadId}, " +
+                $"Apartment={Thread.CurrentThread.GetApartmentState()}, " +
+                $"Context={(_uiContext == null ? "NULL" : _uiContext.GetType().FullName)}"
+            );
         }
+
+
+
 
         public override void Done()
         {
@@ -189,6 +382,7 @@ namespace CTMOleClient
             try
             {
                 UnadviseEvents();
+                RemoveCallbacks();
                 CtmCClient.Uninitialize();
                 _lastError = "Uninitialized";
                 _uiContext = null;
@@ -335,7 +529,7 @@ namespace CTMOleClient
                 {
                     _lastError = result.error.ToString();
                     LogToFile($"✗ BeginCustomerTransaction failed: {result.error}");
-                    if (result.intPtr != IntPtr.Zero) Marshal.FreeHGlobal(result.intPtr);
+                    //if (result.intPtr != IntPtr.Zero) Marshal.FreeHGlobal(result.intPtr);
                     return false;
                 }
             }
@@ -700,68 +894,24 @@ namespace CTMOleClient
         public void AdviseEvents()
         {
             LogToFile("AdviseEvents: called.");
+
             _eventsEnabled = true;
-            LogToFile("AdviseEvents: ENABLED for 1C x86.");
+
+            LogToFile("AdviseEvents: ENABLED.");
         }
 
         public void UnadviseEvents()
         {
             LogToFile("UnadviseEvents: called.");
-            try
-            {
-                if (_deviceErrorCallback != null)
-                {
-                    CtmCClient.RemoveDeviceErrorEventHandler(_deviceErrorCallback);
-                    _deviceErrorCallback = null;
-                }
-                if (_cashAcceptCallback != null)
-                {
-                    CtmCClient.RemoveCashAcceptEventHandler(_cashAcceptCallback);
-                    _cashAcceptCallback = null;
-                }
-                if (_cashAcceptCompleteCallback != null)
-                {
-                    CtmCClient.RemoveCashAcceptCompleteEventHandler(_cashAcceptCompleteCallback);
-                    _cashAcceptCompleteCallback = null;
-                }
-                if (_deviceStatusCallback != null)
-                {
-                    CtmCClient.RemoveDeviceStatusEventHandler(_deviceStatusCallback);
-                    _deviceStatusCallback = null;
-                }
-                if (_socketClosedCallback != null)
-                {
-                    CtmCClient.RemoveSocketClosedEventHandler(_socketClosedCallback);
-                    _socketClosedCallback = null;
-                }
-                if (_changeContextCallback != null)
-                {
-                    CtmCClient.RemoveChangeContextEventHandler(_changeContextCallback);
-                    _changeContextCallback = null;
-                }
-                if (_authenticationCallback != null)
-                {
-                    CtmCClient.RemoveAuthenticationEventHandler(_authenticationCallback);
-                    _authenticationCallback = null;
-                }
-                if (_cmClosedCallback != null)
-                {
-                    CtmCClient.RemoveCMClosedEventHandler(_cmClosedCallback);
-                    _cmClosedCallback = null;
-                }
 
-                _eventsEnabled = false;
-                LogToFile("UnadviseEvents: All handlers removed.");
-            }
-            catch (Exception ex)
-            {
-                LogToFile($"UnadviseEvents error: {ex.Message}");
-            }
+            _eventsEnabled = false;
+
+            LogToFile("UnadviseEvents: DISABLED.");
         }
 
         private void AddCallbacks()
         {
-            if (_eventsEnabled) return;
+            if (_callbacksRegistered) return;
 
             _deviceErrorCallback = HandleDeviceError;
             _cashAcceptCallback = HandleCashAccept;
@@ -796,14 +946,18 @@ namespace CTMOleClient
             CtmCClient.AddCMClosedEventHandler(_cmClosedCallback);
             LogToFile("CMClosed handler added.");
 
-            _eventsEnabled = true;
+            _callbacksRegistered = true;
             LogToFile("✓ All callbacks registered");
 
         }
 
         private void RemoveCallbacks()
         {
-            if (!_eventsEnabled) return;
+            if (!_callbacksRegistered)
+                return;
+
+            LogToFile("RemoveCallbacks: START");
+
             CtmCClient.RemoveDeviceErrorEventHandler(_deviceErrorCallback);
             CtmCClient.RemoveCashAcceptEventHandler(_cashAcceptCallback);
             CtmCClient.RemoveCashAcceptCompleteEventHandler(_cashAcceptCompleteCallback);
@@ -813,18 +967,18 @@ namespace CTMOleClient
             CtmCClient.RemoveAuthenticationEventHandler(_authenticationCallback);
             CtmCClient.RemoveCMClosedEventHandler(_cmClosedCallback);
 
-            _eventsEnabled = false;
-            LogToFile("✓ All callbacks unregistered");
+            _callbacksRegistered = false;
+
+            LogToFile("RemoveCallbacks: all 8 callbacks unregistered");
         }
 
         private void HandleDeviceError(CTMEventInfo evtInfo, CTMDeviceError deviceError)
         {
             string errorInfo = $"Ошибка: Model={deviceError.deviceInfo.deviceModel}, Code={deviceError.resultCode}";
+
             LogToFile($"DeviceError: {errorInfo}");
-            if (_eventsEnabled && _uiContext != null)
-            {
-                _uiContext.Post(_ => InvokeOneCEvent("OnDeviceError", new object[] { errorInfo }), null);
-            }
+
+            PostOneCEvent("OnDeviceError", new object[] { errorInfo });
         }
 
         private void HandleCashAccept(CTMEventInfo evtInfo, CTMAcceptEvent acceptEvent)
@@ -844,8 +998,8 @@ namespace CTMOleClient
                 if (_eventsEnabled && _uiContext != null && _oneCObject != null)
                 {
                     object[] params1C = { (int)amount, (int)amountDue, denom, curr, type };
-                    //object[] params1C = { (int)amount, (int)amountDue, denom, curr };
-                    _uiContext.Post(_ => InvokeOneCEvent("OnCashAccept", params1C), null);
+                    PostOneCEvent("OnCashAccept", params1C);
+
                 }
             }
             catch (Exception ex)
@@ -857,18 +1011,17 @@ namespace CTMOleClient
         private void HandleCashAcceptComplete(CTMEventInfo evtInfo)
         {
             LogToFile("CashAcceptComplete");
-            if (_eventsEnabled && _uiContext != null)
-            {
-                _uiContext.Post(_ => InvokeOneCEvent("OnCashAcceptComplete", new object[] { }), null);
-            }
+
+            PostOneCEvent("OnCashAcceptComplete", new object[] { });
         }
 
         private void HandleDeviceStatus(CTMEventInfo evtInfo, CTMDeviceStatus deviceStatus)
         {
-            int deviceId = deviceStatus.deviceInfo.deviceId == IntPtr.Zero ? 0 : Marshal.ReadInt32(deviceStatus.deviceInfo.deviceId);
+            int deviceId = deviceStatus.deviceInfo.deviceId == IntPtr.Zero
+                ? 0
+                : Marshal.ReadInt32(deviceStatus.deviceInfo.deviceId);
 
-
-            // Создаем COM-объект для 1C
+            // Создаем COM-объект для 1С
             DeviceStatusInfo statusObj = new DeviceStatusInfo
             {
                 Timestamp = evtInfo.timestamp,
@@ -879,37 +1032,37 @@ namespace CTMOleClient
                 Status = deviceStatus.status
             };
 
-            string logInfo = $"DeviceStatus: Type={statusObj.DeviceType}, ID={statusObj.DeviceId}, Model={statusObj.DeviceModel}, Status={statusObj.Status} ";
+            string logInfo = $"DeviceStatus: Type={statusObj.DeviceType}, ID={statusObj.DeviceId}, Model={statusObj.DeviceModel}, Status={statusObj.Status}";
             LogToFile(logInfo);
+
             _deviceStatuses[deviceStatus.deviceInfo.deviceType] = deviceStatus.status;
+
             LogToFile($"Device {deviceStatus.deviceInfo.deviceType} status updated: {deviceStatus.status} (ready if >0)");
-            if (_eventsEnabled && _uiContext != null)
-            {
-                _uiContext.Post(_ => InvokeOneCEvent("OnDeviceStatus", new object[] { statusObj }), null);
-            }
 
-
-
+            // Безопасная постановка события в очередь
+            PostOneCEvent("OnDeviceStatus", new object[] { statusObj });
         }
+
 
         private void HandleSocketClosed(CTMEventInfo evtInfo)
         {
             string info = "Соединение с CTM-сервисом закрыто.";
-            LogToFile($"SocketClosed: {info}");
-            if (_eventsEnabled && _uiContext != null)
-            {
-                _uiContext.Post(_ => InvokeOneCEvent("OnSocketClosed", new object[] { info }), null);
-            }
+
+            LogToFile("SocketClosed: " + info);
+
+            PostOneCEvent(
+                "OnSocketClosed",
+                new object[] { info }
+            );
         }
 
         private void HandleChangeContext(CTMEventInfo evtInfo, CTMContextEvent context)
         {
             string info = $"Смена контекста: {context.context}, Владелец: {context.clientOwner}";
+
             LogToFile($"ChangeContext: {info}");
-            if (_eventsEnabled && _uiContext != null)
-            {
-                _uiContext.Post(_ => InvokeOneCEvent("OnChangeContext", new object[] { info }), null);
-            }
+
+            PostOneCEvent("OnChangeContext", new object[] { info });
         }
 
         private void HandleAuthentication(CTMEventInfo evtInfo, CTMAuthenticationEvent authEvent)
@@ -917,13 +1070,15 @@ namespace CTMOleClient
             try
             {
                 bool isHC = (authEvent.isHCashier == CTMBoolean.CTM_TRUE);
+
                 string info = $"Аутентификация: Пользователь={authEvent.cmUsername}, HCashier={isHC}";
+
                 LogToFile($"Authentication: {info} (пароль скрыт для лога)");
 
-                if (_eventsEnabled && _uiContext != null)
-                {
-                    _uiContext.Post(_ => InvokeOneCEvent("OnAuthentication", new object[] { authEvent.cmUsername, isHC }), null);
-                }
+                PostOneCEvent(
+                    "OnAuthentication",
+                    new object[] { authEvent.cmUsername, isHC }
+                );
             }
             catch (Exception ex)
             {
@@ -934,11 +1089,10 @@ namespace CTMOleClient
         private void HandleCMClosed(CTMEventInfo evtInfo)
         {
             string info = "Cash Management приложение закрыто.";
+
             LogToFile($"CMClosed: {info}");
-            if (_eventsEnabled && _uiContext != null)
-            {
-                _uiContext.Post(_ => InvokeOneCEvent("OnCMClosed", new object[] { info }), null);
-            }
+
+            PostOneCEvent("OnCMClosed", new object[] { info });
         }
 
 
